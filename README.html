@@ -62,7 +62,7 @@
 </nav>
 
 <h2 id="but">À quoi sert ce kit</h2>
-<p>Ce kit sert à examiner la sécurité d'un dépôt cible (aujourd'hui <code>002-wnext</code>) <strong>sans rien installer sur le poste</strong> et <strong>sans jamais modifier le dépôt</strong>. Il combine deux approches complémentaires :</p>
+<p>Ce kit sert à examiner la sécurité d'un dépôt cible <strong>sans rien installer sur le poste</strong> et <strong>sans jamais modifier le dépôt</strong>. Il combine deux approches complémentaires :</p>
 <ul>
   <li><strong>Le scan</strong> : des outils classiques, reproductibles, qui cherchent des problèmes connus (secrets, dépendances vulnérables, motifs de code dangereux).</li>
   <li><strong>L'audit</strong> : un agent à outils qui lit le code, formule des hypothèses d'attaque, les fait contredire par d'autres agents, et produit des constats sourcés.</li>
@@ -135,8 +135,8 @@
 <h3>Lancer un scan</h3>
 <pre><code>./scan.sh /chemin/vers/un/depot              # n'importe quel dépôt, git ou non
 ./scan.sh /chemin/vers/un/depot --strict     # échoue aussi sur un constat haut
-./scan.sh /chemin/vers/un/depot --audit=audits/002-wnext/run-1</code></pre>
-<p>Seule dépendance : Docker. L'image <code>security-kit:&lt;version&gt;</code> se construit au premier lancement. La progression s'affiche en console ; le rapport final est un dashboard <code>report.html</code> dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>. Budget : 10 minutes maximum, étapes en parallèle (30 à 50 s mesurées sur <code>002-wnext</code>). Détail : <code>scanner/README.md</code>.</p>
+./scan.sh /chemin/vers/un/depot --audit=audits/&lt;dépôt&gt;/run-1</code></pre>
+<p>Seule dépendance : Docker. L'image <code>security-kit:&lt;version&gt;</code> se construit au premier lancement. La progression s'affiche en console ; le rapport final est un dashboard <code>report.html</code> dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>. Budget : 10 minutes maximum, étapes en parallèle (30 à 50 s mesurées sur un dépôt applicatif réel). Détail : <code>scanner/README.md</code>.</p>
 
 <h3>Lancer un audit</h3>
 <p>Dans une session d'agent de code ouverte sur le dépôt cible, avec le skill disponible :</p>
@@ -174,7 +174,7 @@
 ├── reports/               sorties du scan (générées, ignorées par git)
 │   └── &lt;horodatage&gt;-&lt;dépôt&gt;/   report.html, resume.json, JSON bruts
 └── audits/                sorties d'audits par agent (versionnées)
-    └── 002-wnext/
+    └── &lt;dépôt&gt;/
         └── run-1/         REPORT.md, findings.json, coverage-ledger.json…</code></pre>
 
 <h2 id="limites">Limites à connaître</h2>

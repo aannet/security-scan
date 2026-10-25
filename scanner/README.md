@@ -59,4 +59,4 @@ Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.to
   forcer une : `docker build --platform linux/arm64 -t security-kit:$(cat VERSION) scanner`.
 - **Versions :** changer un outil = changer la version et les deux sommes SHA-256 (amd64, arm64) dans le `Dockerfile`.
   `scan.py` et le rapport lisent les versions dans l'environnement de l'image.
-- **Durée mesurée :** 002-wnext (776 fichiers, 521 commits) 26 s ; ark 13 s ; le kit lui-même 5 s.
+- **Durée mesurée :** dépôt applicatif de 776 fichiers et 521 commits 26 s ; un second dépôt 13 s ; le kit lui-même 5 s.

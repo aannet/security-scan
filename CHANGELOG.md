@@ -17,7 +17,7 @@ source unique dans `VERSION`.
 ### Modifié
 
 - Règles Semgrep converties en JSON au build : environ 10 s de chargement en moins par scan
-  (11,3 → 5,0 s sur le kit, 22 → 13 s sur ark, 32 → 26 s sur wnext). Constats identiques.
+  (11,3 → 5,0 s sur le kit, 22 → 13 s et 32 → 26 s sur deux dépôts applicatifs). Constats identiques.
 - Tests d'intégrité du skill Cloudflare déplacés au build.
 - Passes gitleaks en parallèle ; inventaire et fichiers non suivis en un seul appel `git ls-files -t`.
 
