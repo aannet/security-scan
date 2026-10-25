@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Security Kit — README</title>
+<style>
+  :root {
+    --bg: #fafaf8; --fg: #1d1f23; --muted: #5b6068; --line: #e2e1dc;
+    --card: #ffffff; --accent: #1f5fbf; --code-bg: #f1f0ec; --ok: #1d7a46; --warn: #a15c00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e6e7ea; --muted: #9aa0a8; --line: #2a2e35;
+      --card: #1b1e23; --accent: #6ea4f4; --code-bg: #22262c; --ok: #5cc98a; --warn: #e0a24a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  h2 { font-size: 1.35rem; margin: 2.4em 0 .6em; padding-top: .8em; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 1.6em 0 .3em; }
+  .lead { color: var(--muted); font-size: 1.1rem; margin: 0 0 1.5em; }
+  a { color: var(--accent); }
+  code, pre { font: 0.88em/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  code { background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: .95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 1em 0; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .card h3 { margin: 0 0 .3em; }
+  .card p { margin: 0; color: var(--muted); font-size: .95rem; }
+  .tag { display: inline-block; font-size: .75rem; padding: 1px 8px; border-radius: 99px;
+    border: 1px solid var(--line); color: var(--muted); margin-left: 6px; vertical-align: middle; }
+  .note { border-left: 3px solid var(--warn); background: var(--card); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 1em 0; }
+  ol.steps { padding-left: 1.3em; }
+  ol.steps li { margin: .35em 0; }
+  nav { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 16px; margin: 0 0 1em; }
+  nav a { margin-right: 14px; white-space: nowrap; }
+  pre.tree { line-height: 1.45; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Security Kit</h1>
+<p class="lead">Un poste de travail de sécurité pour un dépôt de code : un scan déterministe en conteneur, plus un audit mené par un agent, avec des rapports vérifiables.</p>
+
+<nav>
+  <a href="#but">But</a>
+  <a href="#vue">Vue d'ensemble</a>
+  <a href="#scanner">Scanner</a>
+  <a href="#audit">Audit par agent</a>
+  <a href="#usage">Utilisation</a>
+  <a href="#arbo">Arborescence</a>
+  <a href="#limites">Limites</a>
+</nav>
+
+<h2 id="but">À quoi sert ce kit</h2>
+<p>Ce kit sert à examiner la sécurité d'un dépôt cible (aujourd'hui <code>002-wnext</code>) <strong>sans rien installer sur le poste</strong> et <strong>sans jamais modifier le dépôt</strong>. Il combine deux approches complémentaires :</p>
+<ul>
+  <li><strong>Le scan</strong> : des outils classiques, reproductibles, qui cherchent des problèmes connus (secrets, dépendances vulnérables, motifs de code dangereux).</li>
+  <li><strong>L'audit</strong> : un agent à outils qui lit le code, formule des hypothèses d'attaque, les fait contredire par d'autres agents, et produit des constats sourcés.</li>
+</ul>
+<p>Le scan répond à « y a-t-il un problème déjà répertorié ? ». L'audit répond à « existe-t-il une faille propre à ce code ? ». Aucun des deux ne remplace l'autre.</p>
+
+<h2 id="vue">Vue d'ensemble</h2>
+<div class="grid">
+  <div class="card"><h3>1. Scan <span class="tag">déterministe</span></h3><p>Image Docker avec gitleaks, OSV-Scanner et Semgrep aux versions épinglées. Même entrée, même sortie.</p></div>
+  <div class="card"><h3>2. Audit <span class="tag">agent</span></h3><p>Skill Cloudflare <code>security-audit</code> : reconnaissance, chasse, validation adverse, rapport.</p></div>
+  <div class="card"><h3>3. Contrôle <span class="tag">validation</span></h3><p>Les validateurs du skill vérifient que <code>findings.json</code> et <code>coverage-ledger.json</code> respectent le schéma.</p></div>
+</div>
+
+<h2 id="scanner">Le scanner (<code>scanner/</code>)</h2>
+<p>Une image locale reproduit <code>npm run scan</code> du dépôt cible. Le code scanné n'est jamais copié dans l'image : il est monté en <strong>lecture seule</strong> sur <code>/src</code>, et les rapports sortent dans un dossier séparé monté sur <code>/out</code>.</p>
+
+<table>
+  <thead><tr><th>Étape</th><th>Outil</th><th>Ce qu'elle regarde</th><th>Critique si…</th></tr></thead>
+  <tbody>
+    <tr><td><code>secrets</code></td><td>gitleaks 8.30.1</td><td>Tout l'historique git, modifications indexées et non indexées, fichiers non suivis. Secrets masqués dans le rapport.</td><td>Tout secret non justifié</td></tr>
+    <tr><td><code>deps</code></td><td>OSV-Scanner 2.7.0</td><td><code>package-lock.json</code> contre la base OSV.</td><td>CVSS ≥ 9</td></tr>
+    <tr><td><code>code</code></td><td>Semgrep 1.181.0</td><td>Règles <code>p/typescript</code>, <code>p/nodejs</code>, <code>p/security-audit</code>.</td><td>Impact CRITICAL</td></tr>
+    <tr><td><code>skill</code></td><td>Node + validateurs</td><td>Intégrité du skill et validation d'un audit monté sur <code>/audit</code>.</td><td>Test en échec ou fichier invalide</td></tr>
+  </tbody>
+</table>
+
+<h3>Garanties d'isolation</h3>
+<ul>
+  <li>Utilisateur non root, système de fichiers en lecture seule (<code>--read-only</code>), seul <code>/tmp</code> est inscriptible.</li>
+  <li>Aucune capacité Linux (<code>--cap-drop ALL</code>), pas d'élévation (<code>no-new-privileges</code>), mémoire plafonnée (<code>--memory 4g</code>), 512 processus au plus.</li>
+  <li>Binaires téléchargés vérifiés par somme SHA-256 ; skill cloné à une révision git précise dont le hash est contrôlé.</li>
+</ul>
+
+<h3>Codes de sortie</h3>
+<p>Le scan échoue (code 1) sur un constat critique ou une erreur d'outil. Avec <code>--strict</code>, il échoue aussi sur un constat haut. Le résumé est écrit dans <code>resume.json</code>, à côté des rapports bruts de chaque outil.</p>
+
+<h2 id="audit">L'audit par agent (<code>.agents/skills/</code>, <code>audits/</code>)</h2>
+<p>Le skill <a href="https://github.com/cloudflare/security-audit-skill"><code>cloudflare/security-audit-skill</code></a> (licence MIT) transforme un agent de code en auditeur. Il est installé dans <code>.agents/skills/security-audit</code> et sa version est figée dans <code>skills-lock.json</code> (hash de contrôle). Sa licence est dans <code>LICENSES/</code>. L'image Docker clone sa propre copie, épinglée à une révision.</p>
+
+<h3>Les six phases</h3>
+<ol class="steps">
+  <li><strong>Reconnaissance</strong> : architecture, frontières de confiance, surfaces d'entrée, registre de couverture (<code>coverage-ledger.json</code>).</li>
+  <li><strong>Chasse guidée par la couverture</strong> : des chasseurs isolés prennent chacun des unités du registre ; des critiques cherchent les trous.</li>
+  <li><strong>Validation des candidats</strong> : chaque piste est confiée à un vérificateur neuf dont le travail est de la <em>réfuter</em>.</li>
+  <li><strong>Sortie structurée</strong> : <code>findings.json</code>, validé contre <code>report-schema.json</code>.</li>
+  <li><strong>Vérification indépendante</strong> : de nouveaux agents revérifient les affirmations sur le source.</li>
+  <li><strong>Rapports</strong> : <code>REPORT.md</code>, <code>FINDINGS-DETAIL.md</code>, <code>NEEDS-VALIDATION.md</code>.</li>
+</ol>
+
+<h3>Les trois verdicts</h3>
+<table>
+  <thead><tr><th>Verdict</th><th>Sens</th></tr></thead>
+  <tbody>
+    <tr><td><code>confirmed</code></td><td>Trace complète dans le source, résultat observable borné, sévérité attribuée.</td></tr>
+    <tr><td><code>needs_validation</code></td><td>Piste sérieuse bloquée sur un fait précis non vérifiable (souvent une exécution ou une config de déploiement). Aucune sévérité.</td></tr>
+    <tr><td><code>rejected</code></td><td>Candidat réfuté, conservé avec la raison pour ne pas être réexaminé.</td></tr>
+  </tbody>
+</table>
+
+<h3>Principes</h3>
+<ul>
+  <li>L'agent qui vérifie n'est jamais celui qui a trouvé.</li>
+  <li>La sévérité vient de la probabilité × l'impact, pas d'un écart à une liste.</li>
+  <li>Une défense en profondeur manquante est une note de durcissement, pas une vulnérabilité.</li>
+  <li>Les runs s'additionnent : chaque passage cible les trous du précédent.</li>
+</ul>
+
+<h2 id="usage">Utilisation</h2>
+
+<h3>Lancer un scan</h3>
+<pre><code>./scan.sh /chemin/vers/un/depot              # n'importe quel dépôt, git ou non
+./scan.sh /chemin/vers/un/depot --strict     # échoue aussi sur un constat haut
+./scan.sh /chemin/vers/un/depot --audit=audits/002-wnext/run-1</code></pre>
+<p>Seule dépendance : Docker. L'image <code>security-kit:1</code> se construit au premier lancement. La progression s'affiche en console ; le rapport final est un dashboard <code>report.html</code> dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>. Budget : 10 minutes maximum, étapes en parallèle (30 à 50 s mesurées sur <code>002-wnext</code>). Détail : <code>scanner/README.md</code>.</p>
+
+<h3>Lancer un audit</h3>
+<p>Dans une session d'agent de code ouverte sur le dépôt cible, avec le skill disponible :</p>
+<pre><code>security audit this codebase</code></pre>
+<p>Les livrables arrivent dans <code>audits/&lt;dépôt&gt;/run-N/</code>. Relancer crée un nouveau <code>run-N</code> qui s'appuie sur les précédents.</p>
+
+<h3>Où lire les résultats</h3>
+<table>
+  <thead><tr><th>Fichier</th><th>Contenu</th></tr></thead>
+  <tbody>
+    <tr><td><code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/report.html</code>, <code>resume.json</code></td><td>Synthèse du scan, comptes par sévérité.</td></tr>
+    <tr><td><code>audits/…/run-N/REPORT.md</code></td><td>Synthèse de l'audit : confirmés, à valider, rejetés, limites de méthode.</td></tr>
+    <tr><td><code>audits/…/run-N/FINDINGS-DETAIL.md</code></td><td>Détail des constats confirmés.</td></tr>
+    <tr><td><code>audits/…/run-N/NEEDS-VALIDATION.md</code></td><td>Pistes à vérifier et le fait exact qui manque.</td></tr>
+    <tr><td><code>audits/…/run-N/run-metadata.json</code></td><td>Commit audité, état du worktree, politique d'exécution.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="arbo">Arborescence</h2>
+<pre class="tree"><code>003-security-kit/
+├── README.html            ce document
+├── INTENT.md, CLAUDE.md   exigences du kit et rappel pour les agents
+├── scan.sh                lanceur : ./scan.sh &lt;dépôt&gt;
+├── skills-lock.json       version et hash du skill installé
+├── LICENSES/              licence MIT du skill Cloudflare
+├── .agents/skills/
+│   └── security-audit/    skill actif pour les agents
+├── scanner/               contexte de build de l'image (code seulement)
+│   ├── Dockerfile         image : gitleaks, OSV-Scanner, Semgrep, skill
+│   ├── scan.py            orchestrateur parallèle + progression console
+│   ├── report.py          dashboard HTML
+│   └── README.md          détail du scanner
+├── reports/               sorties du scan (générées, ignorées par git)
+│   └── &lt;horodatage&gt;-&lt;dépôt&gt;/   report.html, resume.json, JSON bruts
+└── audits/                sorties d'audits par agent (versionnées)
+    └── 002-wnext/
+        └── run-1/         REPORT.md, findings.json, coverage-ledger.json…</code></pre>
+
+<h2 id="limites">Limites à connaître</h2>
+<div class="note">
+  <strong>Pas d'exécution du code cible.</strong> L'audit actuel est une analyse du source seulement : pas de sandbox imposée par l'OS, donc aucun test dynamique. Ce qui exigerait une exécution reste classé <code>needs_validation</code>.
+</div>
+<ul>
+  <li><strong>Réseau :</strong> nécessaire pour OSV-Scanner. Les règles Semgrep sont figées dans l'image au build.</li>
+  <li><strong>Configuration :</strong> les exclusions et seuils viennent de <code>tests/security/</code> du dépôt scanné, pas de l'image. Les modifier ne demande pas de reconstruire.</li>
+  <li><strong>Architectures :</strong> image native amd64 et arm64 (Mac Apple Silicon, Graviton), choisie selon l'hôte.</li>
+  <li><strong>Versions :</strong> changer un outil impose de changer la version <em>et</em> les deux sommes SHA-256 (amd64, arm64), dans le <code>Dockerfile</code> seulement.</li>
+  <li><strong>Le skill n'est pas lancé par le conteneur :</strong> c'est un workflow d'agent multi-phases qui demande un modèle. Le conteneur ne fait que le valider.</li>
+  <li><strong>Une passe ne suffit pas :</strong> selon les auteurs du skill, un seul run trouve environ la moitié de ce que des runs répétés trouvent au total.</li>
+</ul>
+
+</main>
+</body>
+</html>

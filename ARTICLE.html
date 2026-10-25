@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Security Kit — note de cadrage</title>
+<style>
+  :root { --bg:#ffffff; --fg:#1b1d21; --muted:#5f646c; --line:#e3e5e8; --soft:#f5f6f7; --accent:#1f5fbf; --warn:#9a5b00; }
+  * { box-sizing: border-box; }
+  html { color-scheme: light; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font:17px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:740px; margin:0 auto; padding:0 16px; }
+  header { border-bottom:1px solid var(--line); background:var(--soft); }
+  header .wrap { padding-top:56px; padding-bottom:40px; }
+  .kicker { font-size:.78rem; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin:0 0 14px; }
+  h1 { font-size:clamp(1.8rem,5vw,2.5rem); line-height:1.15; margin:0 0 14px; letter-spacing:-.01em; }
+  .dek { font-size:1.15rem; color:var(--muted); margin:0; }
+  main { padding:36px 0 72px; }
+  h2 { font-size:1.3rem; margin:2.2em 0 .5em; }
+  p { margin:0 0 1.1em; }
+  ul { padding-left:1.2em; margin:0 0 1.2em; }
+  li { margin:.35em 0; }
+  a { color:var(--accent); }
+  code { font:.85em ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--soft); padding:.1em .35em; border-radius:4px; }
+  .tldr { background:var(--soft); border:1px solid var(--line); border-radius:10px; padding:16px 20px; margin:0 0 1.5em; }
+  .tldr b { display:block; font-size:.75rem; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin-bottom:6px; }
+  .tldr ul { margin:0; }
+  .flow { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin:1.2em 0 1.6em; }
+  .flow div { border:1px solid var(--line); border-radius:10px; padding:14px 16px; font-size:.95rem; }
+  .flow strong { display:block; margin-bottom:4px; }
+  .flow span { color:var(--muted); }
+  table { width:100%; border-collapse:collapse; margin:1em 0 1.4em; font-size:.95rem; }
+  th,td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin:1.2em 0 1.4em; text-align:center; }
+  .stats div { border:1px solid var(--line); border-radius:10px; padding:12px 8px; }
+  .stats b { display:block; font-size:1.9rem; line-height:1.1; }
+  .stats span { font-size:.8rem; color:var(--muted); }
+  .ask { border-left:3px solid var(--warn); background:var(--soft); padding:12px 16px; border-radius:0 8px 8px 0; margin-top:1.6em; }
+  footer { border-top:1px solid var(--line); margin-top:2.4em; padding-top:16px; font-size:.85rem; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <p class="kicker">Security Kit · note de cadrage</p>
+    <h1>Un audit de sécurité reproductible, sans rien installer sur le poste</h1>
+    <p class="dek">Ce que le kit fait, pourquoi il est construit comme ça, où il en est, et la décision à prendre pour la suite.</p>
+  </div>
+</header>
+
+<main class="wrap">
+
+<div class="tldr">
+  <b>En bref</b>
+  <ul>
+    <li>Deux couches : un <strong>scan déterministe</strong> en conteneur, un <strong>audit par agent</strong> avec preuve et vérification indépendante.</li>
+    <li>Le dépôt cible est monté en lecture seule. Le kit n'écrit jamais dedans.</li>
+    <li>Premier run sur un dépôt applicatif : 3 constats confirmés, 9 à valider, 2 rejetés. Aucun critique ni élevé.</li>
+    <li>Reste à trancher : sandbox d'exécution d'abord, ou run-2 d'audit (voir fin).</li>
+  </ul>
+</div>
+
+<h2>Le problème</h2>
+
+<p>Un scanner seul sort du bruit sans jugement. Un agent seul sort du jugement sans preuve. Dans les deux cas, quelqu'un doit trier à la main, ce qui veut dire que le coût réel d'un audit, c'est le temps d'un senior, pas la puissance de calcul.</p>
+
+<p>Le kit vise l'inverse : un résultat qu'on peut lire en dix minutes et dont on connaît le niveau de preuve, sans toucher à la machine ni au dépôt.</p>
+
+<h2>Ce que fait le kit</h2>
+
+<div class="flow">
+  <div><strong>1. Scan</strong><span>gitleaks, OSV-Scanner, Semgrep dans une image Docker aux versions épinglées. Même entrée, même sortie.</span></div>
+  <div><strong>2. Audit</strong><span>Un agent suit le skill <code>security-audit</code> en six phases : recon, chasse, validation adverse, sortie structurée, vérification, rapport.</span></div>
+  <div><strong>3. Contrôle</strong><span>Les validateurs du skill vérifient que <code>findings.json</code> et <code>coverage-ledger.json</code> respectent le schéma.</span></div>
+</div>
+
+<table>
+  <thead><tr><th>Étape du scan</th><th>Outil</th><th>Échec si</th></tr></thead>
+  <tbody>
+    <tr><td>Secrets</td><td>gitleaks 8.30.1, historique git complet</td><td>tout secret non justifié</td></tr>
+    <tr><td>Dépendances</td><td>OSV-Scanner 2.7.0 sur <code>package-lock.json</code></td><td>CVSS ≥ 9</td></tr>
+    <tr><td>Code</td><td>Semgrep 1.181.0 (<code>p/typescript</code>, <code>p/nodejs</code>, <code>p/security-audit</code>)</td><td>impact CRITICAL</td></tr>
+    <tr><td>Skill</td><td>tests du skill + validation d'un audit monté sur <code>/audit</code></td><td>test en échec ou fichier invalide</td></tr>
+  </tbody>
+</table>
+
+<p>Le scan dit « y a-t-il du connu ? ». L'audit dit « y a-t-il une faille propre à ce code ? ». On ne remplace pas l'un par l'autre, donc on garde les deux.</p>
+
+<h2>Choix de conception</h2>
+
+<ul>
+  <li><strong>Lecture seule partout.</strong> Dépôt monté en <code>:ro</code>, conteneur <code>--read-only</code>, <code>--cap-drop ALL</code>, utilisateur non root, mémoire plafonnée à 3 Go (la WSL a déjà planté deux fois sur la mémoire). Seuls <code>/tmp</code> et <code>/out</code> sont inscriptibles.</li>
+  <li><strong>Tout est épinglé.</strong> Binaires vérifiés par SHA-256, skill cloné à un commit précis dont le hash est contrôlé, puis historique git supprimé.</li>
+  <li><strong>Config côté cible, pas côté image.</strong> Exclusions et seuils viennent de <code>tests/security/</code> du dépôt scanné, donc changer une exclusion ne demande pas de rebuild.</li>
+  <li><strong>Parité avec le dépôt.</strong> Même logique de sévérité et mêmes versions que le script de scan du dépôt d'origine, ce qui veut dire que les deux doivent rester alignés (URL et somme, dans les deux fichiers).</li>
+  <li><strong>Sorties séparées.</strong> Rapports du scan dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>, audits dans <code>audits/&lt;repo&gt;/run-N/</code>. Rien ne se mélange avec le code audité.</li>
+  <li><strong>Un verdict = un niveau de preuve.</strong> <code>confirmed</code> a une trace source et une sévérité. <code>needs_validation</code> nomme le fait manquant et n'a pas de sévérité. <code>rejected</code> garde sa raison.</li>
+</ul>
+
+<h2>Ce qu'on emprunte à Cloudflare</h2>
+
+<p>L'audit repose sur le skill open source <code>cloudflare/security-audit-skill</code> (MIT), à la révision <code>c1c8a8c</code> épinglée dans le <code>Dockerfile</code>. On ne l'a pas réécrit : on a pris sa discipline, c'est-à-dire exiger une frontière franchie et un résultat concret avant tout constat, faire réfuter chaque candidat par un agent distinct de celui qui l'a trouvé, ne jamais attribuer de sévérité à ce qui n'est pas prouvé, tenir un registre de couverture qui montre aussi ce qui n'a pas été regardé, et n'exécuter la cible que sous bac à sable OS. Notre apport se limite à l'enveloppe : isolation, épinglage, validation automatique de la sortie, et branchement sur le scan.</p>
+
+<h2>Résultat du premier run</h2>
+
+<p>Cible : un dépôt applicatif (environ 800 fichiers), profil <code>standard</code>, analyse source uniquement.</p>
+
+<div class="stats">
+  <div><b>3</b><span>confirmés<br>(bas, moyen)</span></div>
+  <div><b>9</b><span>à valider</span></div>
+  <div><b>2</b><span>rejetés</span></div>
+  <div><b>19</b><span>unités de couverture</span></div>
+</div>
+
+<ul>
+  <li>Le plus important est classé « à valider » : il dépend de la configuration de déploiement, que le code ne peut pas garantir. La question part donc au propriétaire du déploiement.</li>
+  <li>Sur les 19 unités : 7 couvertes, 9 candidates, 2 différées, 1 hors périmètre. Les trois dernières catégories sont déclarées dans le rapport, pas passées sous silence.</li>
+  <li>Le scan de son côté n'a trouvé aucun secret, aucun critique ni élevé ; 2 moyens et 2 bas sur une dépendance, 3 moyens Semgrep dans un script tiers.</li>
+</ul>
+
+<h2>Ce qui manque</h2>
+
+<ul>
+  <li><strong>Pas de bac à sable OS.</strong> Aucun code cible n'a été exécuté. Tout ce qui demande une exécution reste en <code>needs_validation</code>. C'est le plus gros plafond sur la valeur de l'audit aujourd'hui.</li>
+  <li><strong>Un run ne suffit pas.</strong> Les auteurs du skill indiquent qu'une passe trouve environ la moitié du total sur des runs répétés. Un seul <code>run-1</code>, donc.</li>
+  <li><strong>Pas de suivi dans le temps.</strong> Le scan est générique (<code>./scan.sh &lt;dépôt&gt;</code>, moins d'une minute mesurée) mais chaque run est isolé : pas de CI, pas de tendance.</li>
+</ul>
+
+<h2>Priorités (80/20)</h2>
+
+<ul>
+  <li>Traiter les 9 <code>needs_validation</code> avec les owners : c'est là qu'est la valeur immédiate, pour un coût faible.</li>
+  <li>Lever le plafond d'exécution : un sandbox OS conforme, sinon l'audit reste statique.</li>
+  <li>Faire un <code>run-2</code> sur le même dépôt : les passes sont additives, donc c'est le meilleur ratio coût / couverture gagnée.</li>
+  <li>Reporter à plus tard : CI et suivi dans le temps.</li>
+</ul>
+
+<div class="ask">
+  <strong>Décision attendue.</strong> On investit d'abord dans le sandbox OS pour que l'audit puisse exécuter et trancher les 9 pistes, ou on lance un <code>run-2</code> immédiat en analyse source et on traite les <code>needs_validation</code> à la main avec les owners ?
+</div>
+
+<footer>
+  Sources : skill <a href="https://github.com/cloudflare/security-audit-skill">cloudflare/security-audit-skill</a> (MIT) ; chiffres du run issus de son rapport d'audit et de son <code>resume.json</code>, conservés hors du dépôt public. Mode d'emploi : <a href="README.html">README.html</a>.
+</footer>
+
+</main>
+</body>
+</html>
