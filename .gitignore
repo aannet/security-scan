@@ -1,2 +1,4 @@
 reports/
 __pycache__/
+# Audit d'un dépôt tiers : constats sensibles, gardés en local.
+audits/002-wnext/
