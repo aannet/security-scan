@@ -15,7 +15,7 @@ Rappel des invariants :
 
 ## Carte
 
-- `VERSION` : version du kit (SemVer), source unique. `scan.sh` en fait le tag de l'image et la passe au build (`KIT_VERSION`) ; affichée en console et dans le rapport. L'incrémenter à chaque modification livrée de `scanner/` ou `scan.sh`.
+- `VERSION` : version du kit (SemVer), source unique. `scan.sh` en fait le tag de l'image et la passe au build (`KIT_VERSION`) ; affichée en console et dans le rapport. L'incrémenter à chaque modification livrée de `scanner/` ou `scan.sh`, avec une entrée dans `CHANGELOG.md` et un tag `vX.Y.Z`.
 - `scan.sh` : lanceur (build de l'image si absente, puis scan).
 - `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py` et `report.py`.
 - `scanner/Dockerfile` : image (outils et règles Semgrep épinglés au build). Source unique des versions : exposées en `ENV`, lues par `scan.py` (`VERSIONS`), jamais écrites en dur ailleurs.
