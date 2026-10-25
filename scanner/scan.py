@@ -71,7 +71,7 @@ MANIFESTS = {"package.json", "pyproject.toml", "Pipfile", "requirements.txt", "C
 
 
 def empty():
-    return {k: 0 for k in LEVELS}
+    return dict.fromkeys(LEVELS, 0)
 
 
 def sev(score):
@@ -128,6 +128,8 @@ class Board:
     """Tableau des étapes. En TTY : redessiné sur place, étapes qui se ferment. Sinon : une ligne par transition."""
     SPIN = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
     COLORS = {"ok": "32", "warn": "33", "fail": "31", "skip": "90", "run": "36", "wait": "90"}
+    ICONS = {"wait": "·", "ok": "✓", "warn": "!", "fail": "✗", "skip": "–"}
+    WORDS = {"wait": "attente", "run": "en cours", "ok": "terminé", "warn": "constats", "fail": "échec", "skip": "ignoré"}
 
     def __init__(self, names):
         self.names = names
@@ -147,11 +149,7 @@ class Board:
                 s["t1"] = time.monotonic()
             s["state"], s["note"] = state, note
             if not self.tty:
-                print(f"[{fmt_t(time.monotonic() - T0)}] {LABELS[name]:<14} {self._word(state):<10} {note}", flush=True)
-
-    @staticmethod
-    def _word(state):
-        return {"wait": "attente", "run": "en cours", "ok": "terminé", "warn": "constats", "fail": "échec", "skip": "ignoré"}[state]
+                print(f"[{fmt_t(time.monotonic() - T0)}] {LABELS[name]:<14} {self.WORDS[state]:<10} {note}", flush=True)
 
     def elapsed(self, name):
         s = self.st[name]
@@ -162,12 +160,12 @@ class Board:
     def _line(self, name):
         s = self.st[name]
         state = s["state"]
-        icon = {"wait": "·", "ok": "✓", "warn": "!", "fail": "✗", "skip": "–"}.get(state) or self.SPIN[self.tick % len(self.SPIN)]
+        icon = self.ICONS.get(state) or self.SPIN[self.tick % len(self.SPIN)]
         t = fmt_t(self.elapsed(name)) if s["t0"] else "     "
         c = self.COLORS[state]
         return f"  \x1b[{c}m{icon}\x1b[0m {LABELS[name]:<14} \x1b[90m{t}  {TOOLS[name]:<22}\x1b[0m {s['note']}"
 
-    def draw(self, final=False):
+    def draw(self):
         with self.lock:
             done = sum(1 for n in self.names if self.st[n]["state"] in ("ok", "warn", "fail", "skip"))
             total = len(self.names)
@@ -207,7 +205,7 @@ class Board:
         self.stop.set()
         self.thread.join()
         if self.tty:
-            self.draw(final=True)
+            self.draw()
             sys.stdout.write("\x1b[?25h")
             sys.stdout.flush()
 
@@ -230,12 +228,15 @@ def git_info():
 
 
 def inventory():
-    files = None
+    files, untracked = None, []
     if (SRC / ".git").exists():
-        r = subprocess.run(["git", "-C", str(SRC), "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        # -t préfixe chaque chemin de son état ("? " = non suivi) : fichiers et non suivis en un seul appel.
+        r = subprocess.run(["git", "-C", str(SRC), "ls-files", "-z", "-t", "--cached", "--others", "--exclude-standard"],
                            capture_output=True, text=True)
         if r.returncode == 0:
-            files = [p for p in r.stdout.split("\0") if p and (SRC / p).is_file()]
+            tagged = [(p[2:], p[0] == "?") for p in r.stdout.split("\0") if p and (SRC / p[2:]).is_file()]
+            files = [p for p, _ in tagged]
+            untracked = [p for p, other in tagged if other]
     if files is None:
         files = []
         for root, dirs, names in os.walk(SRC):
@@ -258,16 +259,11 @@ def inventory():
             manifests.append(f)
     info = git_info()
     note = f"{len(files)} fichiers, {len(zones)} zones, {len(langs)} langages"
-    return {"files": files, "zones": zones, "langs": langs, "manifests": manifests, "git": info, "note": note}
+    return {"files": files, "untracked": untracked, "zones": zones, "langs": langs, "manifests": manifests,
+            "git": info, "note": note}
 
 
 LOOSE = Path("/tmp/gitleaks-files")  # copie des fichiers hors historique, pour gitleaks dir
-
-
-def untracked():
-    r = subprocess.run(["git", "-C", str(SRC), "ls-files", "-z", "--others", "--exclude-standard"],
-                       capture_output=True, text=True)
-    return [p for p in r.stdout.split("\0") if p and (SRC / p).is_file()] if r.returncode == 0 else []
 
 
 def copy_loose(files):
@@ -298,7 +294,7 @@ def secrets(inv):
         passes.append(("history", ["gitleaks", "git", *base, str(SRC)]))
         passes.append(("unstaged", ["gitleaks", "git", "--pre-commit", *base, str(SRC)]))
         passes.append(("staged", ["gitleaks", "git", "--pre-commit", "--staged", *base, str(SRC)]))
-        loose = untracked()
+        loose = inv["untracked"]
         scope = f"{g['commits']} commits, modifications indexées et non indexées, {len(loose)} fichier(s) non suivi(s)"
     elif g["git"]:
         loose = inv["files"]
@@ -309,23 +305,29 @@ def secrets(inv):
     skipped = copy_loose(loose) if loose else []
     if loose:
         passes.append(("files", ["gitleaks", "dir", *base, str(LOOSE)]))
-    found = {}
-    try:
-        for name, args in passes:
-            report = Path(f"/tmp/gitleaks-{name}.json")
-            report.unlink(missing_ok=True)
+    def one(p):
+        name, args = p
+        report = Path(f"/tmp/gitleaks-{name}.json")
+        try:
             r = run([*args[:-1], "--report-path", str(report), args[-1]])
             if r.returncode != 0:
                 raise RuntimeError(f"gitleaks {name} : {(r.stderr or r.stdout)[-400:]}")
-            root = args[-1] + "/"
-            for f in read_json(report, []):
-                path = str(f.get("File") or "")
-                f["File"] = path[len(root):] if path.startswith(root) else path  # chemins relatifs au dépôt
-                key = (f["File"], f.get("StartLine"), f.get("RuleID"), f.get("Commit", ""))
-                found.setdefault(key, {**f, "_pass": name})
+            return name, args[-1] + "/", read_json(report, [])
+        finally:
             report.unlink(missing_ok=True)
+
+    try:  # passes indépendantes : en parallèle, fusionnées dans l'ordre de la liste
+        with ThreadPoolExecutor(max_workers=max(1, len(passes))) as pool:
+            results = list(pool.map(one, passes))
     finally:
         shutil.rmtree(LOOSE, ignore_errors=True)
+    found = {}
+    for name, root, findings in results:
+        for f in findings:
+            path = str(f.get("File") or "")
+            f["File"] = path[len(root):] if path.startswith(root) else path  # chemins relatifs au dépôt
+            key = (f["File"], f.get("StartLine"), f.get("RuleID"), f.get("Commit", ""))
+            found.setdefault(key, {**f, "_pass": name})
     found = list(found.values())
     (OUT / "gitleaks.json").write_text(json.dumps(found, indent=2, ensure_ascii=False), encoding="utf-8")
     c = empty()
@@ -367,22 +369,20 @@ def deps(inv):
                 except (TypeError, ValueError):
                     level = "unknown"
                 c[level] += 1
-                gid = (g.get("ids") or [None])[0]
-                pkg = p["package"]
                 ids = g.get("ids") or []
+                gid = ids[0] if ids else None
+                pkg = p["package"]
                 items.append({"sev": level, "where": f"{pkg['name']}@{pkg['version']} · {rel}", "rule": gid or "",
                               "msg": (by_id.get(gid) or {}).get("summary", ""), "zone": zone_of(rel),
                               "tools": [{"name": f"OSV-Scanner {VERSIONS['osv']}",
                                          "detail": f"base OSV.dev · {', '.join(ids[:3])} · {pkg.get('ecosystem', '')}"}]})
     # Un manifeste est couvert si un lockfile scanné se trouve dans son répertoire ou un parent (workspaces).
+    lockfiles = sorted(set(lockfiles))
     lock_dirs = {str(PurePosixPath(l).parent) for l in lockfiles}
-    def covered(m):
-        d = PurePosixPath(m).parent
-        return any(str(p) in lock_dirs for p in [d, *d.parents]) or m in lockfiles
-    uncovered = [m for m in inv["manifests"] if not covered(m)]
-    n = sum(c.values())
-    return {"counts": c, "items": items, "lockfiles": sorted(set(lockfiles)), "uncovered_manifests": uncovered,
-            "config": bool(cfg), "note": f"{len(set(lockfiles))} lockfile(s), {n} vulnérabilité(s)"}
+    uncovered = [m for m in inv["manifests"]
+                 if not any(str(d) in lock_dirs for d in PurePosixPath(m).parents)]
+    return {"counts": c, "items": items, "lockfiles": lockfiles, "uncovered_manifests": uncovered,
+            "config": bool(cfg), "note": f"{len(lockfiles)} lockfile(s), {sum(c.values())} vulnérabilité(s)"}
 
 
 TEST_DIRS = {"test", "tests"}  # ignorés par défaut par Semgrep (.semgrepignore implicite)
@@ -412,12 +412,8 @@ def pack_index(packs):
     """id de règle -> packs utilisés qui la contiennent (une règle peut être dans plusieurs packs)."""
     index = {}
     for p in packs:
-        path = RULES / f"{p}.yml"
-        if not path.exists():
-            continue
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if line.startswith("- id: "):
-                index.setdefault(line[6:].strip(), []).append(p)
+        for r in read_json(RULES / f"{p}.json", {}).get("rules", []):
+            index.setdefault(r["id"], []).append(p)
     return index
 
 
@@ -425,8 +421,7 @@ def semgrep_packs(inv):
     packs = ["security-audit"]
     for lang in inv["langs"]:
         packs += PACKS.get(lang, [])
-    names = {PurePosixPath(f).name for f in inv["files"]}
-    if "package.json" in names:
+    if any(PurePosixPath(m).name == "package.json" for m in inv["manifests"]):
         packs.append("nodejs")
     if any(f.startswith(".github/workflows/") for f in inv["files"]):
         packs.append("github-actions")
@@ -442,8 +437,7 @@ def code(inv):
     args = ["semgrep", "scan", "--metrics=off", "--quiet", "--json", "--output", str(report), "--jobs", jobs,
             "--timeout", "20", "--max-target-bytes", "1000000", "--disable-version-check"]
     for p in packs:
-        local = RULES / f"{p}.yml"
-        args += ["--config", str(local) if local.exists() else f"p/{p}"]
+        args += ["--config", str(RULES / f"{p}.json")]
     for p in ex.get("paths", []):
         args += ["--exclude", p["pattern"]]
     for rule in ex.get("rules", []):
@@ -471,7 +465,7 @@ def code(inv):
     # Un fichier en erreur d'analyse figure quand même dans paths.scanned : il ne doit pas compter comme couvert.
     unparsed = sorted({str(e["path"]) for e in data.get("errors", []) if e.get("path")})
     scanned = [str(p) for p in (data.get("paths") or {}).get("scanned", []) if str(p) not in unparsed]
-    fetched = (RULES / "FETCHED").read_text().strip() if (RULES / "FETCHED").exists() else "registre (réseau)"
+    fetched = (RULES / "FETCHED").read_text().strip() if (RULES / "FETCHED").exists() else "?"
     unparsed_detail = [{"path": str(e["path"]), "msg": str(e.get("message", "")).split("\n")[0][:160]}
                        for e in data.get("errors", []) if e.get("path")]
     return {"counts": c, "items": items, "packs": packs, "scanned": scanned, "errors": len(data.get("errors", [])),
@@ -483,14 +477,12 @@ def code(inv):
 
 
 def skill(inv):
-    """Skill d'audit Cloudflare : intégrité (tests du skill) et validation d'une sortie d'audit montée sur /audit.
-    L'audit lui-même n'est pas produit ici : il demande un agent à outils et un modèle."""
+    """Skill d'audit Cloudflare : validation d'une sortie d'audit montée sur /audit. L'intégrité du skill (ses tests)
+    est vérifiée au build de l'image, figée ensuite. L'audit lui-même n'est pas produit ici : il demande un agent à
+    outils et un modèle."""
     sd = Path(os.environ.get("SKILL_DIR", "/opt/security-audit-skill/skills/security-audit"))
     if not (sd / "validate-findings.cjs").exists():
         raise RuntimeError(f"skill absent de l'image : {sd}")
-    tests = run(["node", "--test", str(sd / "validate-findings.test.cjs"), str(sd / "validate-coverage-ledger.test.cjs")])
-    if tests.returncode != 0:
-        raise RuntimeError(f"tests du skill en échec : {tests.stdout[-400:]}{tests.stderr[-400:]}")
     checks = {"findings.json": "validate-findings.cjs", "coverage-ledger.json": "validate-coverage-ledger.cjs"}
     audit = Path(os.environ.get("AUDIT_DIR", "/audit"))
     counts = empty()
@@ -521,7 +513,7 @@ def skill(inv):
                   "note": usage.get("note", ""), "run_id": meta.get("run_id", ""),
                   "model": (meta.get("models") or {}).get("all_subagents", "")}
     present = [k for k, v in validated.items() if v != "absent"]
-    note = "intégrité OK, " + (", ".join(f"{k} {v}" for k, v in validated.items()) if present else "pas d'audit monté")
+    note = "intégrité OK (build), " + (", ".join(f"{k} {v}" for k, v in validated.items()) if present else "pas d'audit monté")
     if tokens:
         note += f", audit {tokens['total'] / 1e6:.2f} M tokens"
     return {"counts": counts, "items": items, "validated": validated, "tokens": tokens, "note": note}
@@ -610,9 +602,7 @@ def main(argv):
     keys = ("scanned", "unparsed", "excluded", "tests", "other")
     for z, v in data["inventory"]["zones"].items():
         v.update({k: cov[z][k] for k in keys})
-    total = Counter()
-    for c in cov.values():
-        total.update(c)
+    total = sum(cov.values(), Counter())
     data["inventory"].update({"analysable": len(analysable_files), "analysable_scanned": total["scanned"],
                               **{k: total[k] for k in keys if k != "scanned"}})
 

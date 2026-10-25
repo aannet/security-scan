@@ -24,41 +24,45 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git nodejs \
  && rm -rf /var/lib/apt/lists/*
 
-# Skill : clone à la révision épinglée, vérification de la révision, puis suppression de l'historique git.
+# Skill : clone à la révision épinglée, vérification de la révision, tests d'intégrité (une fois pour toutes : l'image
+# est figée), puis suppression de l'historique git.
 RUN git clone "${SKILL_REPO}" /opt/security-audit-skill \
  && git -C /opt/security-audit-skill checkout --quiet "${SKILL_REF}" \
  && test "$(git -C /opt/security-audit-skill rev-parse HEAD)" = "${SKILL_REF}" \
+ && cd /opt/security-audit-skill/skills/security-audit \
+ && node --test validate-findings.test.cjs validate-coverage-ledger.test.cjs \
  && rm -rf /opt/security-audit-skill/.git \
  && chmod -R a+rX /opt/security-audit-skill
 
-# gitleaks (archive .tar.gz). Architecture lue dans l'image (dpkg), indépendante du builder (BuildKit ou non).
+# gitleaks (archive .tar.gz) et OSV-Scanner (binaire brut). Architecture lue dans l'image (dpkg), indépendante du
+# builder (BuildKit ou non).
 RUN arch="$(dpkg --print-architecture)" \
  && case "$arch" in \
-      amd64) asset=x64;   sum="${GITLEAKS_SHA256_AMD64}" ;; \
-      arm64) asset=arm64; sum="${GITLEAKS_SHA256_ARM64}" ;; \
+      amd64) asset=x64;   gsum="${GITLEAKS_SHA256_AMD64}"; osum="${OSV_SHA256_AMD64}" ;; \
+      arm64) asset=arm64; gsum="${GITLEAKS_SHA256_ARM64}"; osum="${OSV_SHA256_ARM64}" ;; \
       *) echo "Architecture non supportée : $arch (amd64, arm64)" >&2; exit 1 ;; \
     esac \
  && curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${asset}.tar.gz" -o /tmp/gitleaks.tgz \
- && echo "${sum}  /tmp/gitleaks.tgz" | sha256sum -c - \
+ && echo "${gsum}  /tmp/gitleaks.tgz" | sha256sum -c - \
  && tar -xzf /tmp/gitleaks.tgz -C /usr/local/bin gitleaks \
- && rm /tmp/gitleaks.tgz
-
-# OSV-Scanner (binaire brut)
-RUN arch="$(dpkg --print-architecture)" \
- && case "$arch" in \
-      amd64) sum="${OSV_SHA256_AMD64}" ;; \
-      arm64) sum="${OSV_SHA256_ARM64}" ;; \
-      *) echo "Architecture non supportée : $arch (amd64, arm64)" >&2; exit 1 ;; \
-    esac \
+ && rm /tmp/gitleaks.tgz \
  && curl -fsSL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_${arch}" -o /usr/local/bin/osv-scanner \
- && echo "${sum}  /usr/local/bin/osv-scanner" | sha256sum -c - \
+ && echo "${osum}  /usr/local/bin/osv-scanner" | sha256sum -c - \
  && chmod 0755 /usr/local/bin/osv-scanner
 
 RUN pip install --no-cache-dir "semgrep==${SEMGREP_VERSION}"
 
-# Règles Semgrep : une copie par pack, date de récupération notée pour le rapport.
-RUN mkdir -p /opt/rules \
- && for p in ${SEMGREP_PACKS}; do curl -fsSL "https://semgrep.dev/c/p/${p}" -o "/opt/rules/${p}.yml" || exit 1; done \
+# Règles Semgrep : une copie par pack, convertie en JSON (Semgrep charge le JSON ~10 s plus vite que le même YAML ;
+# constats identiques), date de récupération notée pour le rapport.
+# Validation : un scan sur un dossier vide charge toutes les règles (schéma et syntaxe des motifs, hors réseau) ;
+# une règle que cette version de Semgrep refuse fait échouer le build plutôt que le premier scan.
+# semgrep --validate ne suffit pas : il laisse passer un motif invalide.
+RUN mkdir -p /opt/rules /tmp/vide \
+ && for p in ${SEMGREP_PACKS}; do curl -fsSL "https://semgrep.dev/c/p/${p}" -o "/tmp/${p}.yml" || exit 1; done \
+ && python3 -c 'import json, sys; from ruamel.yaml import YAML; y = YAML(typ="safe"); [json.dump(y.load(open(f"/tmp/{p}.yml")), open(f"/opt/rules/{p}.json", "w")) for p in sys.argv[1:]]' ${SEMGREP_PACKS} \
+ && rm /tmp/*.yml \
+ && semgrep scan --metrics=off --disable-version-check --quiet $(for p in ${SEMGREP_PACKS}; do printf -- '--config /opt/rules/%s.json ' "$p"; done) /tmp/vide >/dev/null \
+ && rm -rf /tmp/vide /root/.semgrep \
  && date -u +%Y-%m-%d > /opt/rules/FETCHED \
  && chmod -R a+rX /opt/rules
 

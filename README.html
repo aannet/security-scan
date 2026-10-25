@@ -85,7 +85,7 @@
     <tr><td><code>secrets</code></td><td>gitleaks 8.30.1</td><td>Tout l'historique git, modifications indexées et non indexées, fichiers non suivis. Secrets masqués dans le rapport.</td><td>Tout secret non justifié</td></tr>
     <tr><td><code>deps</code></td><td>OSV-Scanner 2.7.0</td><td><code>package-lock.json</code> contre la base OSV.</td><td>CVSS ≥ 9</td></tr>
     <tr><td><code>code</code></td><td>Semgrep 1.181.0</td><td>Règles <code>p/typescript</code>, <code>p/nodejs</code>, <code>p/security-audit</code>.</td><td>Impact CRITICAL</td></tr>
-    <tr><td><code>skill</code></td><td>Node + validateurs</td><td>Intégrité du skill et validation d'un audit monté sur <code>/audit</code>.</td><td>Test en échec ou fichier invalide</td></tr>
+    <tr><td><code>skill</code></td><td>Node + validateurs</td><td>Validation d'un audit monté sur <code>/audit</code> (intégrité du skill testée au build de l'image).</td><td>Fichier invalide</td></tr>
   </tbody>
 </table>
 
