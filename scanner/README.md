@@ -10,10 +10,11 @@ Scan statique de n'importe quel dépôt. Seule dépendance hôte : Docker. Exige
 ./scan.sh <dépôt> --only=secrets,code          # sous-ensemble d'étapes
 ./scan.sh <dépôt> --audit=audits/<repo>/run-1  # valide en plus une sortie d'audit par agent
 ./scan.sh <dépôt> --rebuild                    # reconstruit l'image (après modif de scan.py, report.py, Dockerfile)
+./scan.sh --version                            # affiche la version du kit
 SCAN_BUDGET=300 ./scan.sh <dépôt>              # budget de temps en secondes (défaut 570)
 ```
 
-L'image `security-kit:1` est construite au premier lancement (environ 1 minute). Rapport :
+L'image `security-kit:<version>` (version lue dans `VERSION`) est construite au premier lancement (environ 1 minute). Rapport :
 `reports/<horodatage>-<dépôt>/report.html` (à la racine du kit, hors du contexte de build), avec les JSON bruts (`gitleaks.json`, `osv.json`, `semgrep.json`, `resume.json`).
 
 ## Étapes (en parallèle après l'inventaire)
@@ -55,7 +56,7 @@ Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.to
 - **Tests :** Semgrep ignore par défaut les dossiers `test/` et `tests/`. Le rapport les compte à part.
 - **Isolation :** dépôt en lecture seule, conteneur `--read-only`, non root, `--cap-drop ALL`, `no-new-privileges`, 4 Go, 512 processus.
 - **Architectures :** amd64 et arm64 (Apple Silicon, Graviton). L'image prend l'architecture de l'hôte ; pour en
-  forcer une : `docker build --platform linux/arm64 -t security-kit:1 scanner`.
+  forcer une : `docker build --platform linux/arm64 -t security-kit:$(cat VERSION) scanner`.
 - **Versions :** changer un outil = changer la version et les deux sommes SHA-256 (amd64, arm64) dans le `Dockerfile`.
   `scan.py` et le rapport lisent les versions dans l'environnement de l'image.
 - **Durée mesurée :** 002-wnext (776 fichiers, 521 commits) 26 s ; ark 13 s ; le kit lui-même 5 s.

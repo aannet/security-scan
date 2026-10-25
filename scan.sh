@@ -2,18 +2,21 @@
 # Security Kit : scan statique d'un dépôt quelconque. Seule dépendance : Docker.
 #
 #   ./scan.sh <chemin-du-dépôt> [--strict] [--only=secrets,deps,code,skill] [--audit=<dossier>] [--rebuild]
+#   ./scan.sh --version
 #
 # Le dépôt est monté en lecture seule. Rapport : reports/<horodatage>-<dépôt>/report.html
 # Aucun fichier de suivi n'est créé : la progression s'affiche en console, le conteneur et son /tmp sont détruits à la fin.
 set -eu
 
 KIT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-IMAGE=${SCAN_IMAGE:-security-kit:1}
+# Version du kit : source unique dans VERSION. Elle tague l'image, donc un changement de version force le build.
+VERSION=$(cat "$KIT/VERSION")
+IMAGE=${SCAN_IMAGE:-security-kit:$VERSION}
 BUDGET=${SCAN_BUDGET:-570}
 
-usage() { sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 1 ] || usage
-case "$1" in -h|--help) usage ;; esac
+case "$1" in -h|--help) usage ;; --version) echo "Security Kit $VERSION"; exit 0 ;; esac
 [ -d "$1" ] || { echo "Dépôt introuvable : $1" >&2; exit 2; }
 REPO=$(CDPATH= cd -- "$1" && pwd)
 shift
@@ -32,7 +35,7 @@ done
 
 if [ "$REBUILD" = 1 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Construction de l'image $IMAGE (une seule fois)..."
-  docker build -q -t "$IMAGE" "$KIT/scanner" >/dev/null
+  docker build -q --build-arg KIT_VERSION="$VERSION" -t "$IMAGE" "$KIT/scanner" >/dev/null
 fi
 
 NAME=$(basename "$REPO")

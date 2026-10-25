@@ -74,11 +74,15 @@ RUN useradd --uid 10001 --create-home scanner \
 USER scanner
 # HOME en tmpfs : Semgrep écrit sa configuration dans ~/.semgrep, et le système de fichiers est en lecture seule.
 # safe.directory : le dépôt monté appartient à l'utilisateur hôte, git refuserait sinon de le lire.
+# Version du kit, passée par scan.sh depuis le fichier VERSION. Déclarée en fin d'image : la changer n'invalide
+# pas le cache des couches d'outils et de règles.
+ARG KIT_VERSION=dev
+LABEL org.opencontainers.image.title="Security Kit" org.opencontainers.image.version=${KIT_VERSION}
 # Versions : source unique, reprise par scan.py pour le rapport.
 ENV HOME=/tmp SEMGREP_SEND_METRICS=off SEMGREP_ENABLE_VERSION_CHECK=0 PYTHONIOENCODING=utf-8 \
     SKILL_DIR=/opt/security-audit-skill/skills/security-audit RULES_DIR=/opt/rules \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=* \
     GITLEAKS_VERSION=${GITLEAKS_VERSION} OSV_VERSION=${OSV_VERSION} SEMGREP_VERSION=${SEMGREP_VERSION} \
-    SKILL_REF=${SKILL_REF}
+    SKILL_REF=${SKILL_REF} KIT_VERSION=${KIT_VERSION}
 
 ENTRYPOINT ["python3", "-I", "/opt/scan/scan.py"]

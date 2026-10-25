@@ -370,7 +370,7 @@ def render(d):
 
     code = steps.get("code", {})
     v = d.get("versions", {})
-    h.append(f'<footer>gitleaks {E(v.get("gitleaks", "?"))} · OSV-Scanner {E(v.get("osv", "?"))} · '
+    h.append(f'<footer>Security Kit {E(v.get("kit", "?"))} · gitleaks {E(v.get("gitleaks", "?"))} · OSV-Scanner {E(v.get("osv", "?"))} · '
              f'Semgrep {E(v.get("semgrep", "?"))}, règles figées le {E(code.get("rules_date", "—"))}'
              f' ({E(", ".join(code.get("packs", [])))}) · skill cloudflare/security-audit-skill {E(v.get("skill", "?"))}'
              f' · image {E(v.get("arch", "?"))}. '

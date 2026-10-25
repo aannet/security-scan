@@ -136,7 +136,7 @@
 <pre><code>./scan.sh /chemin/vers/un/depot              # n'importe quel dépôt, git ou non
 ./scan.sh /chemin/vers/un/depot --strict     # échoue aussi sur un constat haut
 ./scan.sh /chemin/vers/un/depot --audit=audits/002-wnext/run-1</code></pre>
-<p>Seule dépendance : Docker. L'image <code>security-kit:1</code> se construit au premier lancement. La progression s'affiche en console ; le rapport final est un dashboard <code>report.html</code> dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>. Budget : 10 minutes maximum, étapes en parallèle (30 à 50 s mesurées sur <code>002-wnext</code>). Détail : <code>scanner/README.md</code>.</p>
+<p>Seule dépendance : Docker. L'image <code>security-kit:&lt;version&gt;</code> se construit au premier lancement. La progression s'affiche en console ; le rapport final est un dashboard <code>report.html</code> dans <code>reports/&lt;horodatage&gt;-&lt;dépôt&gt;/</code>. Budget : 10 minutes maximum, étapes en parallèle (30 à 50 s mesurées sur <code>002-wnext</code>). Détail : <code>scanner/README.md</code>.</p>
 
 <h3>Lancer un audit</h3>
 <p>Dans une session d'agent de code ouverte sur le dépôt cible, avec le skill disponible :</p>
@@ -159,6 +159,7 @@
 <pre class="tree"><code>003-security-kit/
 ├── README.html            ce document
 ├── INTENT.md, CLAUDE.md   exigences du kit et rappel pour les agents
+├── VERSION              version du kit (tag de l'image)
 ├── scan.sh                lanceur : ./scan.sh &lt;dépôt&gt;
 ├── skills-lock.json       version et hash du skill installé
 ├── LICENSES/              licence MIT du skill Cloudflare

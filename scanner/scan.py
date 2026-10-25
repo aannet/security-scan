@@ -37,7 +37,7 @@ RULES = Path(os.environ.get("RULES_DIR", "/opt/rules"))
 BUDGET = int(os.environ.get("SCAN_BUDGET", "570"))
 T0 = time.monotonic()
 # Versions fixées par le Dockerfile (ENV) : source unique, reprises dans les constats et le rapport.
-VERSIONS = {"gitleaks": os.environ.get("GITLEAKS_VERSION", "?"), "osv": os.environ.get("OSV_VERSION", "?"),
+VERSIONS = {"kit": os.environ.get("KIT_VERSION", "dev"), "gitleaks": os.environ.get("GITLEAKS_VERSION", "?"), "osv": os.environ.get("OSV_VERSION", "?"),
             "semgrep": os.environ.get("SEMGREP_VERSION", "?"), "skill": os.environ.get("SKILL_REF", "?")[:7],
             "arch": os.uname().machine}
 # Fichiers non suivis plus gros que ce seuil : non copiés pour gitleaks (tmpfs de 1 Go), signalés comme non couverts.
@@ -537,7 +537,7 @@ def main(argv):
 
     names = ["inventory", *STEPS]
     board = Board(names)
-    print(f"\nSecurity Kit · {os.environ.get('REPO_NAME', SRC)} · budget {fmt_t(BUDGET)}\n", flush=True)
+    print(f"\nSecurity Kit {VERSIONS['kit']} · {os.environ.get('REPO_NAME', SRC)} · budget {fmt_t(BUDGET)}\n", flush=True)
     board.start()
 
     board.set("inventory", "run")
