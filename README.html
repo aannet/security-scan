@@ -141,7 +141,7 @@
 <h3>Lancer un audit</h3>
 <p>Dans une session d'agent de code ouverte sur le dépôt cible, avec le skill disponible :</p>
 <pre><code>security audit this codebase</code></pre>
-<p>Les livrables arrivent dans <code>audits/&lt;dépôt&gt;/run-N/</code>. Relancer crée un nouveau <code>run-N</code> qui s'appuie sur les précédents.</p>
+<p>Les livrables arrivent dans <code>audits/&lt;dépôt&gt;/run-N/</code>. Relancer crée un nouveau <code>run-N</code> qui s'appuie sur les précédents. Ils restent en local, ignorés par git : ils décrivent les failles du dépôt audité.</p>
 
 <h3>Où lire les résultats</h3>
 <table>
@@ -173,7 +173,7 @@
 │   └── README.md          détail du scanner
 ├── reports/               sorties du scan (générées, ignorées par git)
 │   └── &lt;horodatage&gt;-&lt;dépôt&gt;/   report.html, resume.json, JSON bruts
-└── audits/                sorties d'audits par agent (versionnées)
+└── audits/                sorties d'audits par agent (locales, ignorées par git)
     └── &lt;dépôt&gt;/
         └── run-1/         REPORT.md, findings.json, coverage-ledger.json…</code></pre>
 

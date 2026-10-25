@@ -24,7 +24,7 @@ Rappel des invariants :
 - Après une modification de `scanner/`, relancer avec `--rebuild` : l'image n'est pas reconstruite automatiquement.
 - `reports/<horodatage>-<dépôt>/` : rapports de scan (générés, ignorés par git, hors du contexte de build).
 - `.agents/skills/security-audit/` : skill d'audit Cloudflare (MIT), version figée dans `skills-lock.json`, licence dans `LICENSES/`. L'image clone sa propre copie épinglée.
-- `audits/<dépôt>/run-N/` : sorties d'audits par agent (versionnées, contrairement à `reports/`).
+- `audits/<dépôt>/run-N/` : sorties d'audits par agent (locales, ignorées par git comme `reports/` : constats sensibles, le dépôt est public).
 - `LICENSES/` : licences des composants tiers.
 
 Dépôt git (branche `main`). Test rapide sur le kit lui-même : `./scan.sh .` (environ 10 s).
