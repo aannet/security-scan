@@ -80,4 +80,7 @@ git) : ils décrivent les failles du dépôt audité. `./scan.sh <dépôt> --aud
 - [`CHANGELOG.md`](CHANGELOG.md) : historique des versions ;
 - `README.html` et `ARTICLE.html` : présentation détaillée et retour sur le premier run.
 
-Licence du skill Cloudflare : [`LICENSES/`](LICENSES/).
+## Licence
+
+Aucune licence : le code du kit est publié sans licence, tous droits réservés.
+Le skill Cloudflare embarqué reste sous sa propre licence MIT, dans [`LICENSES/`](LICENSES/).
