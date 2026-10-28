@@ -45,6 +45,29 @@ Avec `--audit=<run>`, le rapport affiche aussi les tokens consommés par l'audit
 champ `token_usage_subagents`), par phase. Affichage seulement : le scan lui-même ne consomme aucun token, son seul
 garde-fou est le budget de temps.
 
+Il ajoute une section **Audit par agent · analyse** : verdicts du skill (confirmés, à valider, rejetés), état du
+ledger, puis une ligne par piste. Les constats confirmés comptent dans les KPIs et le verdict avec leur sévérité.
+Le skill ne note pas les pistes à valider : un `triage.json` optionnel, écrit par l'agent en fin d'audit dans le
+dossier du run, y ajoute une estimation, affichée comme telle :
+
+```json
+{
+  "context": "Exposition de la cible, en une phrase (optionnel).",
+  "items": [{
+    "fingerprint": "<empreinte présente dans findings.json>",
+    "severity_if_confirmed": "critical | high | medium | low",
+    "attacker": "Qui peut l'exploiter",
+    "confidence": "high | medium | low",
+    "fix_effort": "1 ligne de config",
+    "action": "now | before_release | later",
+    "rationale": "Pourquoi, et le correctif"
+  }]
+}
+```
+
+L'ordre des items donne l'ordre d'affichage. Un `triage.json` non conforme (empreinte inconnue, valeur hors liste)
+fait échouer le scan, comme un `findings.json` invalide.
+
 ## Config du dépôt (optionnelle)
 
 Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.toml`, `semgrep-exclusions.json`

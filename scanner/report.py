@@ -68,6 +68,8 @@ ul.gaps li:last-child{border-bottom:0}
 .tl i em{position:absolute;top:0;bottom:0;border-radius:4px;background:var(--bar)}
 .tl.fail i em{background:var(--no)}
 footer{margin-top:32px;color:var(--muted);font-size:12px}
+.note{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;margin:0 0 10px}
+td small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
 @media (max-width:640px){.tl{grid-template-columns:110px 1fr 48px}}
 """
 
@@ -77,6 +79,12 @@ document.querySelectorAll('.filters button').forEach(x=>x.setAttribute('aria-pre
 const f=b.dataset.f;document.querySelectorAll('#findings tbody tr').forEach(r=>{
 r.hidden=!(f==='all'||r.dataset.sev===f||r.dataset.tool.split(' ').includes(f))})}));
 """
+
+
+TRI_SEV = {"critical": "Critique", "high": "Haute", "medium": "Moyenne", "low": "Basse"}
+TRI_CONF = {"high": ("ok", "Élevée"), "medium": ("part", "Moyenne"), "low": ("na", "Faible")}
+TRI_ACTION = {"now": ("no", "Maintenant"), "before_release": ("part", "Avant mise en ligne"), "later": ("na", "Plus tard")}
+VERDICT = {"confirmed": ("no", "Confirmé"), "needs_validation": ("part", "À valider"), "rejected": ("na", "Rejeté")}
 
 
 def chip(kind, label):
@@ -204,7 +212,8 @@ def dimensions(d):
     if not k:
         v = s.get("validated", {})
         if all(x == "valide" for x in v.values()) and v:
-            k, lbl, detail = "ok", "Validé", "findings.json et coverage-ledger.json conformes au schéma"
+            k, lbl, detail = "ok", "Validé", ("findings.json et coverage-ledger.json conformes au schéma"
+                                             + (", triage.json fourni" if "triage.json" in v else ", sans triage.json"))
         elif any(x == "invalide" for x in v.values()):
             k, lbl, detail = "no", "Invalide", ", ".join(f"{a} {b}" for a, b in v.items())
         else:
@@ -258,6 +267,47 @@ def gaps(d):
     return out
 
 
+def audit_section(a):
+    """Synthèse de l'audit par agent : verdicts du skill et, si triage.json est fourni, estimation de l'agent."""
+    v, led = a["verdicts"], a["ledger"]
+    h = ['<h2>Audit par agent · analyse</h2><div class="kpis">']
+    for cls, n, lbl in [("sev-critical", v.get("confirmed", 0), "Confirmés (skill)"), ("sev-medium", v.get("needs_validation", 0), "À valider"),
+                        ("", v.get("rejected", 0), "Rejetés"), ("", a["units"], f"Unités · {led.get('covered', 0)} couvertes"),
+                        ("", a["agents"] or "—", f"Agents · profil {a['profile'] or '?'}")]:
+        h.append(f'<div class="kpi {cls}"><b>{n}</b><span>{E(lbl)}</span></div>')
+    h.append('</div>')
+    pistes = [p for p in a["pistes"] if p["verdict"] != "rejected"]
+    if a["triaged"]:
+        h.append('<p class="note"><strong>Lecture.</strong> Le skill ne donne de sévérité qu\'aux constats confirmés. '
+                 'Les colonnes Gravité, Attaquant, Confiance et Action sont une estimation de l\'agent d\'audit '
+                 '(<code>triage.json</code>), pas un verdict du skill : la gravité est celle qu\'aurait la piste si elle se confirmait.'
+                 + (f' {E(a["context"])}' if a["context"] else '') + '</p>')
+    else:
+        h.append('<p class="note">Pas de <code>triage.json</code> : les pistes à valider n\'ont pas de gravité estimée.</p>')
+    if pistes:
+        h.append('<div class="panel scroll"><table><thead><tr><th>#</th><th>Piste</th><th>Skill</th><th>Gravité si confirmée</th>'
+                 '<th>Attaquant</th><th>Confiance</th><th>Correctif</th><th>Action</th></tr></thead><tbody>')
+        for n, p in enumerate(pistes, 1):
+            t = p["triage"] or {}
+            vk, vl = VERDICT.get(p["verdict"], ("na", p["verdict"]))
+            sev = p["severity"] or t.get("severity_if_confirmed")
+            sev_html = (f'<span class="s s-{sev}">{TRI_SEV.get(sev, SEV_FR.get(sev, sev))}</span>' if sev else '<span class="muted">—</span>')
+            conf = chip(*TRI_CONF[t["confidence"]]) if t.get("confidence") in TRI_CONF else '<span class="muted">—</span>'
+            act = chip(*TRI_ACTION[t["action"]]) if t.get("action") in TRI_ACTION else '<span class="muted">—</span>'
+            why = f'<small>{E(t["rationale"])}</small>' if t.get("rationale") else ""
+            h.append(f'<tr><td class="num">{n}</td><td><strong>{E(p["title"])}</strong>{why}<small><code>{E(p["where"])}</code></small></td>'
+                     f'<td>{chip(vk, vl)}</td><td>{sev_html}</td><td>{E(t.get("attacker", "—"))}</td><td>{conf}</td>'
+                     f'<td>{E(t.get("fix_effort", "—"))}</td><td>{act}</td></tr>')
+        h.append('</tbody></table></div>')
+    rej = [p for p in a["pistes"] if p["verdict"] == "rejected"]
+    if rej:
+        h.append('<div class="panel" style="margin-top:10px"><ul class="gaps">')
+        for p in rej:
+            h.append(f'<li>{chip("na", "Rejeté")}<span><strong>{E(p["title"])}</strong><br><span class="muted">{E(p["reason"])}</span></span></li>')
+        h.append('</ul></div>')
+    return h
+
+
 def render(d):
     steps, inv = d["steps"], d["inventory"]
     items = []
@@ -299,6 +349,9 @@ def render(d):
     for title, (k, lbl), detail in dimensions(d):
         h.append(f'<div class="dim"><div class="top"><strong>{E(title)}</strong>{chip(k, lbl)}</div><p>{E(detail)}</p></div>')
     h.append('</div>')
+
+    if steps.get("skill", {}).get("audit"):
+        h += audit_section(steps["skill"]["audit"])
 
     h.append('<h2>Zones</h2><div class="panel scroll"><table><thead><tr><th>Zone</th><th class="num">Fichiers</th>'
              '<th>Langages</th><th>Code analysé</th><th>Non analysé</th><th>Constats</th><th>État</th></tr></thead><tbody>')

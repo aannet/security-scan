@@ -7,7 +7,7 @@ Usage (dans le conteneur) :
 Entrées (montées par l'appelant, voir scan.sh) :
   /src     dépôt à scanner, en lecture seule
   /src/tests/security  config optionnelle du dépôt : gitleaks.toml, osv-scanner.toml, semgrep-exclusions.json
-  /audit   optionnel : sortie d'un audit par agent (findings.json, coverage-ledger.json) à valider
+  /audit   optionnel : sortie d'un audit par agent (findings.json, coverage-ledger.json, triage.json optionnel)
   /out     rapports : report.html, resume.json, JSON bruts des outils
 
 Codes de sortie : 1 si un constat critique (secret, CVSS >= 9, Semgrep CRITICAL), une erreur d'outil ou un dépassement
@@ -516,11 +516,72 @@ def skill(inv):
         tokens = {"total": usage.get("total") or sum(p["tokens"] or 0 for p in phases), "phases": phases,
                   "note": usage.get("note", ""), "run_id": meta.get("run_id", ""),
                   "model": (meta.get("models") or {}).get("all_subagents", "")}
+    summary = None
+    if validated.get("findings.json") == "valide":
+        summary, errors = audit_summary(audit, meta)
+        if errors:
+            counts["critical"] += 1
+            validated["triage.json"] = "invalide"
+            items.append({"sev": "critical", "where": "triage.json", "rule": "schéma triage", "msg": " ; ".join(errors)[:300],
+                          "zone": "(audit)", "tools": [{"name": "Security Kit", "detail": "contrôle de triage.json"}]})
+        elif summary["triaged"]:
+            validated["triage.json"] = "valide"
+        # Constats confirmés par le skill : comptés avec leur sévérité, comme ceux des outils.
+        for p in summary["pistes"]:
+            if p["verdict"] == "confirmed":
+                counts[p["severity"]] += 1
+                items.append({"sev": p["severity"], "where": p["where"], "rule": p["fingerprint"][:120], "msg": p["title"],
+                              "zone": "(audit)", "tools": [{"name": "Audit par agent", "detail": f"skill {VERSIONS['skill']}, confirmé"}]})
     present = [k for k, v in validated.items() if v != "absent"]
     note = "intégrité OK (build), " + (", ".join(f"{k} {v}" for k, v in validated.items()) if present else "pas d'audit monté")
     if tokens:
         note += f", audit {tokens['total'] / 1e6:.2f} M tokens"
-    return {"counts": counts, "items": items, "validated": validated, "tokens": tokens, "note": note}
+    return {"counts": counts, "items": items, "validated": validated, "tokens": tokens, "audit": summary, "note": note}
+
+
+TRIAGE_ENUMS = {"severity_if_confirmed": ("critical", "high", "medium", "low"), "confidence": ("high", "medium", "low"),
+                "action": ("now", "before_release", "later")}
+
+
+def audit_summary(audit, meta):
+    """Synthèse d'un audit monté : verdicts du skill, ledger, et triage.json optionnel. Le skill ne donne pas de
+    sévérité aux pistes non confirmées ; triage.json, écrit par l'agent en fin d'audit, y ajoute une estimation
+    (gravité si confirmée, attaquant, confiance, effort, action), affichée comme telle."""
+    findings = read_json(audit / "findings.json", [])
+    ledger = read_json(audit / "coverage-ledger.json", [])
+    triage = read_json(audit / "triage.json", None)
+    by_fp = {f.get("fingerprint"): f for f in findings}
+    errors, tri = [], {}
+    if triage is not None:
+        for n, t in enumerate(triage.get("items", []) if isinstance(triage, dict) else [], 1):
+            fp = t.get("fingerprint")
+            if fp not in by_fp:
+                errors.append(f"item {n} : empreinte absente de findings.json")
+            for k, allowed in TRIAGE_ENUMS.items():
+                if t.get(k) not in allowed:
+                    errors.append(f"item {n} : {k} doit valoir {'|'.join(allowed)}")
+            tri[fp] = t
+        if not isinstance(triage, dict) or not triage.get("items"):
+            errors.append("objet attendu avec une liste items non vide")
+    pistes = []
+    for f in findings:
+        first = (f.get("trace") or [{}])[0]
+        where = f"{first.get('file', '?')}:{first['line']}" if first.get("line") else first.get("file", "?")
+        pistes.append({"fingerprint": f.get("fingerprint", ""), "title": f.get("title", ""), "verdict": f.get("verdict"),
+                       "severity": ((f.get("severity") or {}).get("overall") if (f.get("severity") or {}).get("overall") in LEVELS
+                                    else "unknown") if f.get("verdict") == "confirmed" else None,
+                       "where": where, "reason": f.get("reason", ""), "triage": tri.get(f.get("fingerprint"))})
+    rank = {k: i for i, k in enumerate(TRIAGE_ENUMS["severity_if_confirmed"])}
+    order = list(tri)
+    pistes.sort(key=lambda p: ({"confirmed": 0, "needs_validation": 1}.get(p["verdict"], 2),
+                               order.index(p["fingerprint"]) if p["fingerprint"] in tri else len(order),
+                               rank.get(p["severity"], 9)))
+    summary = {"verdicts": dict(Counter(p["verdict"] for p in pistes)),
+               "ledger": dict(Counter(u.get("status") for u in ledger)), "units": len(ledger),
+               "agents": (meta.get("agents") or {}).get("total"), "profile": meta.get("profile"),
+               "execution": meta.get("execution_policy"), "context": (triage or {}).get("context", "") if isinstance(triage, dict) else "",
+               "triaged": bool(tri) and not errors, "pistes": pistes}
+    return summary, errors
 
 
 STEPS = {"secrets": secrets, "deps": deps, "code": code, "skill": skill}

@@ -9,6 +9,15 @@ source unique dans `VERSION`.
 
 - `README.md` à la racine : présentation, démarrage, options, sortie, limites.
 
+## 1.2.0 - 2026-10-28
+
+### Ajouté
+
+- Rapport : section « Audit par agent · analyse » avec `--audit` : verdicts du skill, ledger, une ligne par piste.
+- `triage.json` optionnel dans le run d'audit : gravité estimée si confirmée, attaquant, confiance, effort et action
+  pour chaque piste, affichés comme estimation de l'agent. Validé par le scan (empreintes, valeurs).
+- Les constats confirmés par le skill comptent dans les KPIs et le verdict avec leur sévérité.
+
 ## 1.1.1 - 2026-10-28
 
 ### Corrigé

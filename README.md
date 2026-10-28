@@ -65,6 +65,9 @@ En complément du scan, le kit embarque le skill [`cloudflare/security-audit-ski
 (MIT) dans `.agents/skills/security-audit/`. Dans une session d'agent de code ouverte sur le dépôt cible :
 `security audit this codebase`. Les livrables arrivent dans `audits/<dépôt>/run-N/`, gardés en local (ignorés par
 git) : ils décrivent les failles du dépôt audité. `./scan.sh <dépôt> --audit=audits/<dépôt>/run-N` valide leur format.
+En fin d'audit, demander à l'agent un `triage.json` (format dans [`scanner/README.md`](scanner/README.md#rapport)) :
+le skill ne note pas les pistes non confirmées, ce fichier donne pour chacune la gravité si elle se confirme, qui
+peut l'exploiter, la confiance et l'action à mener. Le rapport HTML les affiche dans la section d'analyse de l'audit.
 
 ## Limites
 
