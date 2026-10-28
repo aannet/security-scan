@@ -5,6 +5,10 @@ source unique dans `VERSION`.
 
 ## Non publié
 
+### Ajouté
+
+- `README.md` à la racine : présentation, démarrage, options, sortie, limites.
+
 ## 1.1.0 - 2026-10-25
 
 ### Ajouté
