@@ -18,6 +18,7 @@ Le suivi est uniquement affiché en console : aucun fichier de suivi n'est cré�
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -356,7 +357,10 @@ def deps(inv):
     data = read_json(report, {"results": []})
     c = empty()
     items = []
-    lockfiles = []
+    # Les résultats ne listent que les lockfiles vulnérables : la liste complète vient du journal d'osv-scanner.
+    lockfiles = [os.path.relpath(m, SRC) for m in re.findall(r"^Scanned (.+) file and found \d+ packages?$",
+                                                             (r.stdout or "") + (r.stderr or ""), re.M)
+                 if Path(m).is_file()]
     for res in data.get("results") or []:
         src = str((res.get("source") or {}).get("path", ""))
         rel = os.path.relpath(src, SRC) if src.startswith(str(SRC)) else src

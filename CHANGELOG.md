@@ -9,6 +9,13 @@ source unique dans `VERSION`.
 
 - `README.md` à la racine : présentation, démarrage, options, sortie, limites.
 
+## 1.1.1 - 2026-10-28
+
+### Corrigé
+
+- Dépendances : les lockfiles sans vulnérabilité n'étaient pas comptés ; leurs manifestes apparaissaient à tort
+  comme non couverts. La liste vient désormais du journal d'osv-scanner.
+
 ## 1.1.0 - 2026-10-25
 
 ### Ajouté
