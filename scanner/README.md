@@ -37,6 +37,10 @@ le conteneur (`--rm`) et son `/tmp` (tmpfs) disparaissent à la fin.
 
 ## Rapport
 
+Un fichier dont Semgrep ne comprend qu'une partie de la syntaxe (`PartialParsing`) est compté en **analyse
+partielle** : ni couvert, ni en échec, avec les lignes en cause dans les limites. Toute autre erreur sur un fichier le
+compte en erreur d'analyse.
+
 Dashboard HTML autonome : KPIs, couverture par dimension (secrets, dépendances, code, audit, et le dynamique déclaré
 non couvert), zones avec part de code analysé et cause du non-analysé (tests, exclusions du dépôt, autres), liste
 des limites, déroulé, constats filtrables avec l'outil qui les a détectés.

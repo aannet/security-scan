@@ -392,10 +392,32 @@ def deps(inv):
 TEST_DIRS = {"test", "tests"}  # ignorés par défaut par Semgrep (.semgrepignore implicite)
 
 
-def uncovered_reason(path, scanned, patterns, unparsed=()):
-    """scanned, unparsed (erreur d'analyse), excluded (exclusion du dépôt), tests (ignorés par défaut par Semgrep), other."""
+def parse_errors(errors):
+    """Erreurs Semgrep rattachées à un fichier, séparées en deux : analyse partielle (que des PartialParsing, seuls des
+    fragments sont sautés) et analyse en échec (toute autre erreur sur le fichier)."""
+    by_path = {}
+    for e in errors:
+        if e.get("path"):
+            by_path.setdefault(str(e["path"]), []).append(e)
+    partial, failed = [], []
+    for path, errs in sorted(by_path.items()):
+        # Le type est une chaîne, ou une liste [nom, positions] pour PartialParsing.
+        kinds = {t[0] if isinstance(t, list) and t else t for t in (e.get("type") for e in errs)}
+        if kinds == {"PartialParsing"}:
+            lines = {(s.get("start") or {}).get("line") for e in errs for s in e.get("spans") or []}
+            partial.append({"path": path, "lines": sorted(n for n in lines if n)})
+        else:
+            failed += [{"path": path, "msg": str(e.get("message", "")).split("\n")[0][:160]} for e in errs]
+    return partial, failed
+
+
+def uncovered_reason(path, scanned, patterns, unparsed=(), partial=()):
+    """scanned, partial (fragments non analysés), unparsed (erreur d'analyse), excluded (exclusion du dépôt),
+    tests (ignorés par défaut par Semgrep), other."""
     if path in scanned:
         return "scanned"
+    if path in partial:
+        return "partial"
     if path in unparsed:
         return "unparsed"
     parts = PurePosixPath(path).parts
@@ -467,16 +489,19 @@ def code(inv):
                       "msg": str(extra.get("message", "")).split("\n")[0][:240], "zone": zone_of(f["path"]),
                       "tools": [{"name": f"Semgrep {VERSIONS['semgrep']}", "detail": f"pack {origin}"}]})
     # Un fichier en erreur d'analyse figure quand même dans paths.scanned : il ne doit pas compter comme couvert.
-    unparsed = sorted({str(e["path"]) for e in data.get("errors", []) if e.get("path")})
-    scanned = [str(p) for p in (data.get("paths") or {}).get("scanned", []) if str(p) not in unparsed]
+    partial_detail, unparsed_detail = parse_errors(data.get("errors", []))
+    partial = [p["path"] for p in partial_detail]
+    unparsed = sorted({u["path"] for u in unparsed_detail})
+    flagged = set(partial) | set(unparsed)
+    scanned = [str(p) for p in (data.get("paths") or {}).get("scanned", []) if str(p) not in flagged]
     fetched = (RULES / "FETCHED").read_text().strip() if (RULES / "FETCHED").exists() else "?"
-    unparsed_detail = [{"path": str(e["path"]), "msg": str(e.get("message", "")).split("\n")[0][:160]}
-                       for e in data.get("errors", []) if e.get("path")]
     return {"counts": c, "items": items, "packs": packs, "scanned": scanned, "errors": len(data.get("errors", [])),
+            "partial": partial, "partial_detail": partial_detail,
             "unparsed": unparsed, "unparsed_detail": unparsed_detail,
             "rules_date": fetched, "exclusions": len(ex.get("paths", [])) + len(ex.get("rules", [])),
             "exclude_patterns": [p["pattern"] for p in ex.get("paths", [])],
             "note": f"{len(scanned)} fichiers analysés, {len(packs)} packs, {sum(c.values())} constat(s)"
+                    + (f", {len(partial)} en analyse partielle" if partial else "")
                     + (f", {len(unparsed)} en erreur d'analyse" if unparsed else "")}
 
 
@@ -660,11 +685,12 @@ def main(argv):
     scanned = set(summary.get("code", {}).get("scanned") or [])
     patterns = summary.get("code", {}).get("exclude_patterns") or []
     unparsed = set(summary.get("code", {}).get("unparsed") or [])
+    partial = set(summary.get("code", {}).get("partial") or [])
     analysable_files = [f for f in inv["files"] if lang_of(f) in ANALYSABLE]
     cov = {z: Counter() for z in inv["zones"]}
     for f in analysable_files:
-        cov[zone_of(f)][uncovered_reason(f, scanned, patterns, unparsed)] += 1
-    keys = ("scanned", "unparsed", "excluded", "tests", "other")
+        cov[zone_of(f)][uncovered_reason(f, scanned, patterns, unparsed, partial)] += 1
+    keys = ("scanned", "partial", "unparsed", "excluded", "tests", "other")
     for z, v in data["inventory"]["zones"].items():
         v.update({k: cov[z][k] for k in keys})
     total = sum(cov.values(), Counter())

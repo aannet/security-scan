@@ -3,6 +3,14 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.2.2 - 2026-11-25
+
+### Corrigé
+
+- Semgrep : un fichier avec seulement des erreurs `PartialParsing` était annoncé « règles non appliquées » et compté
+  comme non analysé. Il est désormais compté en analyse partielle, avec les lignes en cause, sans être compté comme
+  couvert.
+
 ## 1.2.1 - 2026-11-24
 
 ### Modifié

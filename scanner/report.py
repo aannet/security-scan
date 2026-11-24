@@ -149,13 +149,14 @@ def zone_state(v, code_ok):
     app = app_files(v)
     if app <= 0:
         return chip("part", "Exclue (dépôt)") if v["excluded"] >= v["tests"] else chip("part", "Tests seulement")
-    if v["scanned"] == 0:
+    if v["scanned"] + v.get("partial", 0) == 0:
         return chip("no", "Non couverte")
     return chip("ok", "Couverte") if v["scanned"] >= app * 0.9 else chip("part", "Partielle")
 
 
 def not_scanned(v):
-    parts = [f"{v['unparsed']} erreur d'analyse" if v.get("unparsed") else "",
+    parts = [f"{v['partial']} analyse partielle" if v.get("partial") else "",
+             f"{v['unparsed']} erreur d'analyse" if v.get("unparsed") else "",
              f"{v['tests']} tests" if v["tests"] else "", f"{v['excluded']} exclus" if v["excluded"] else "",
              f"{v['other']} autres" if v["other"] else ""]
     return " · ".join(p for p in parts if p) or "—"
@@ -199,9 +200,11 @@ def dimensions(d):
     if not k:
         sc, app = inv["analysable_scanned"], app_files(inv)
         pct = round(100 * sc / app) if app else 0
-        k, lbl = ("ok", "Couvert") if pct >= 90 else ("part", "Partiel") if pct > 0 else ("no", "Non couvert")
+        k, lbl = (("ok", "Couvert") if pct >= 90 else ("part", "Partiel") if sc + inv.get("partial", 0) > 0
+                  else ("no", "Non couvert"))
         detail = (f"{sc}/{app} fichiers applicatifs ({pct} %), {len(s.get('packs', []))} packs. "
                   f"Hors calcul : {inv['tests']} tests, {inv['excluded']} exclus par le dépôt"
+                  + (f". {inv['partial']} en analyse partielle" if inv.get("partial") else "")
                   + (f". {inv['unparsed']} en erreur d'analyse" if inv.get("unparsed") else ""))
     else:
         detail = s.get("error", "")
@@ -245,6 +248,10 @@ def gaps(d):
                 out.append(("part", "Code", f"Zone {z} : {v['excluded']} fichier(s) exclu(s) par la config du dépôt"))
             if v["other"]:
                 out.append(("no", "Code", f"Zone {z} : {v['other']} fichier(s) ignoré(s) par Semgrep (taille, syntaxe ou langage)"))
+        for p in steps.get("code", {}).get("partial_detail", []):
+            at = ", ".join(map(str, p["lines"][:10])) + ("…" if len(p["lines"]) > 10 else "")
+            out.append(("part", "Code", f"{p['path']} : analyse partielle Semgrep, syntaxe non comprise"
+                        + (f" (ligne(s) {at})" if at else "") + " ; les règles ne couvrent pas ces fragments"))
         for u in steps.get("code", {}).get("unparsed_detail", []):
             out.append(("no", "Code", f"{u['path']} : erreur d'analyse Semgrep, règles non appliquées ({u['msg']})"))
         if inv["tests"]:
@@ -354,7 +361,7 @@ def render(d):
         h += audit_section(steps["skill"]["audit"])
 
     h.append('<h2>Zones</h2><div class="panel scroll"><table><thead><tr><th>Zone</th><th class="num">Fichiers</th>'
-             '<th>Langages</th><th>Code analysé</th><th>Non analysé</th><th>Constats</th><th>État</th></tr></thead><tbody>')
+             '<th>Langages</th><th>Code analysé</th><th>Hors couverture complète</th><th>Constats</th><th>État</th></tr></thead><tbody>')
     code_ok = "code" in d["only"] and "error" not in steps.get("code", {})
 
     def zkey(z):
