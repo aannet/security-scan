@@ -33,9 +33,13 @@ for a in "$@"; do
   esac
 done
 
+# --rebuild repart de zéro : sans --pull ni --no-cache, Docker réutiliserait l'image de base et les règles Semgrep.
 if [ "$REBUILD" = 1 ] || ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   echo "Construction de l'image $IMAGE (une seule fois)..."
-  docker build -q --build-arg KIT_VERSION="$VERSION" -t "$IMAGE" "$KIT/scanner" >/dev/null
+  FRESH=""
+  [ "$REBUILD" = 1 ] && FRESH="--pull --no-cache"
+  # shellcheck disable=SC2086
+  docker build -q $FRESH --build-arg KIT_VERSION="$VERSION" -t "$IMAGE" "$KIT/scanner" >/dev/null
 fi
 
 NAME=$(basename "$REPO")

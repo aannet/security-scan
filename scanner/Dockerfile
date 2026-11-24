@@ -9,10 +9,10 @@ FROM python:3.12-slim
 ARG GITLEAKS_VERSION=8.30.1
 ARG GITLEAKS_SHA256_AMD64=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
 ARG GITLEAKS_SHA256_ARM64=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
-ARG OSV_VERSION=2.7.0
-ARG OSV_SHA256_AMD64=160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
-ARG OSV_SHA256_ARM64=4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7
-ARG SEMGREP_VERSION=1.181.0
+ARG OSV_VERSION=2.7.1
+ARG OSV_SHA256_AMD64=fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8
+ARG OSV_SHA256_ARM64=983d22fbad9724514e3fcc6acc83b5fa64c5ffa6b0d9f510028f22c1b223ff81
+ARG SEMGREP_VERSION=1.187.0
 # Packs Semgrep téléchargés au build : règles figées dans l'image, aucun accès au registre pendant le scan.
 # scan.py choisit ceux qui correspondent aux langages détectés.
 ARG SEMGREP_PACKS="security-audit javascript typescript nodejs python golang java kotlin ruby php csharp rust scala dockerfile terraform c github-actions kubernetes"

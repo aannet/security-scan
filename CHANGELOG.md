@@ -3,6 +3,17 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.2.1 - 2026-11-24
+
+### Modifié
+
+- OSV-Scanner 2.7.0 → 2.7.1, Semgrep 1.181.0 → 1.187.0.
+
+### Corrigé
+
+- `--rebuild` réutilisait le cache Docker : les règles Semgrep et l'image de base n'étaient pas rafraîchies. La
+  reconstruction se fait désormais avec `--pull --no-cache`.
+
 ## 1.2.0 - 2026-10-28
 
 ### Ajouté

@@ -9,7 +9,7 @@ Scan statique de n'importe quel dépôt. Seule dépendance hôte : Docker. Exige
 ./scan.sh <dépôt> --strict                     # échoue aussi sur un constat haut
 ./scan.sh <dépôt> --only=secrets,code          # sous-ensemble d'étapes
 ./scan.sh <dépôt> --audit=audits/<repo>/run-1  # valide en plus une sortie d'audit par agent
-./scan.sh <dépôt> --rebuild                    # reconstruit l'image (après modif de scan.py, report.py, Dockerfile)
+./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (après modif de scan.py, report.py, Dockerfile)
 ./scan.sh --version                            # affiche la version du kit
 SCAN_BUDGET=300 ./scan.sh <dépôt>              # budget de temps en secondes (défaut 570)
 ```
@@ -23,8 +23,8 @@ L'image `security-kit:<version>` (version lue dans `VERSION`) est construite au 
 |-------|-------|--------|-------------|
 | Inventaire | `git ls-files` (sinon parcours) | fichiers, zones, langages, manifestes | — |
 | `secrets` | gitleaks 8.30.1 | historique git complet, modifications indexées et non indexées, fichiers non suivis (≤ 10 Mo) ; dépôt sans commit : répertoire de travail ; sans git : répertoire | tout secret non justifié |
-| `deps` | OSV-Scanner 2.7.0 | tous les lockfiles, récursivement | CVSS ≥ 9 |
-| `code` | Semgrep 1.181.0 | packs choisis selon les langages détectés, règles figées dans l'image | impact CRITICAL |
+| `deps` | OSV-Scanner 2.7.1 | tous les lockfiles, récursivement | CVSS ≥ 9 |
+| `code` | Semgrep 1.187.0 | packs choisis selon les langages détectés, règles figées dans l'image | impact CRITICAL |
 | `skill` | validateurs Cloudflare | validation d'un audit monté sur `/audit` (intégrité du skill testée au build de l'image) | fichier invalide |
 
 Une erreur d'outil ou un dépassement du budget fait échouer le scan (code 1).
@@ -75,7 +75,7 @@ Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.to
 
 ## Points à savoir
 
-- **Réseau :** requis par OSV-Scanner (base de vulnérabilités). Les règles Semgrep sont dans l'image, converties en JSON au build (Semgrep les charge ~10 s plus vite qu'en YAML) puis validées par un scan à vide, qui fait échouer le build si la version de Semgrep refuse une règle : `--rebuild` les rafraîchit.
+- **Réseau :** requis par OSV-Scanner (base de vulnérabilités). Les règles Semgrep sont dans l'image, converties en JSON au build (Semgrep les charge ~10 s plus vite qu'en YAML) puis validées par un scan à vide, qui fait échouer le build si la version de Semgrep refuse une règle : `--rebuild` les rafraîchit, ainsi que l'image de base (`--pull --no-cache`).
 - **Tests :** Semgrep ignore par défaut les dossiers `test/` et `tests/`. Le rapport les compte à part.
 - **Isolation :** dépôt en lecture seule, conteneur `--read-only`, non root, `--cap-drop ALL`, `no-new-privileges`, 4 Go, 512 processus.
 - **Architectures :** amd64 et arm64 (Apple Silicon, Graviton). L'image prend l'architecture de l'hôte ; pour en

@@ -23,7 +23,7 @@ Prérequis : Docker et un `sh` POSIX. Linux, macOS ou Windows (WSL), en x86_64 c
 ./scan.sh <dépôt> --strict                     # échoue aussi sur un constat haut
 ./scan.sh <dépôt> --only=secrets,code          # sous-ensemble d'étapes : secrets, deps, code, skill
 ./scan.sh <dépôt> --audit=audits/<dépôt>/run-1 # valide en plus la sortie d'un audit par agent
-./scan.sh <dépôt> --rebuild                    # reconstruit l'image
+./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (base et règles à jour)
 ./scan.sh --version
 SCAN_BUDGET=300 ./scan.sh <dépôt>              # budget de temps en secondes (défaut 570)
 ```
