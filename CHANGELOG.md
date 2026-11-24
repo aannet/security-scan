@@ -3,12 +3,6 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
-## Non publié
-
-### Ajouté
-
-- `README.md` à la racine : présentation, démarrage, options, sortie, limites.
-
 ## 1.2.0 - 2026-10-28
 
 ### Ajouté
@@ -19,6 +13,10 @@ source unique dans `VERSION`.
 - Les constats confirmés par le skill comptent dans les KPIs et le verdict avec leur sévérité.
 
 ## 1.1.1 - 2026-10-28
+
+### Ajouté
+
+- `README.md` à la racine : présentation, démarrage, options, sortie, limites.
 
 ### Corrigé
 
