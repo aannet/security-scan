@@ -61,6 +61,12 @@ Lancer l'application, puis donner son URL :
 Les résultats rejoignent le même `report.html` : section dédiée, constats filtrables, URL visitées, limites. Une alerte
 ZAP « High » compte comme un constat haut (échec avec `--strict`). Le premier scan télécharge l'image ZAP (plus d'1 Go).
 
+**Refus de l'accès anonyme.** Avec `--zap-openapi`, le kit envoie avant ZAP un `GET` sans cookie ni jeton à chaque
+lecture du contrat. Une lecture déclarée protégée (`security`) doit répondre 401 ou 403 : elle apparaît en vert. Un
+2xx devient un constat « haut » (contrôle d'accès absent, ou contrat faux). Tout autre code est « non concluant ».
+Les paramètres de chemin reçoivent des valeurs factices, les écritures ne sont jamais appelées, et la sonde s'arrête à
+20 s ou 500 lectures. Le vert ne dit rien des droits entre utilisateurs ni des injections.
+
 > **Risque sur les données.** Sans `--zap-active`, aucune attaque n'est envoyée, le spider ne soumet pas les formulaires
 > `POST` et les écritures du contrat OpenAPI ne sont pas appelées. Un `GET` à effet de bord reste possible. Avec
 > `--zap-ajax` (le navigateur clique dans l'interface) ou `--zap-active`, **n'utiliser que des données jetables**.
@@ -80,8 +86,11 @@ ZAP « High » compte comme un constat haut (échec avec `--strict`). Le premier
 
 Dans `reports/<horodatage>-<dépôt>/` :
 
-- `report.html` : dashboard autonome (aucune ressource externe) : KPIs, couverture par zone, ce qui n'est pas
-  couvert et pourquoi, constats filtrables ;
+- `report.html` : page autonome (aucune ressource externe), dans l'ordre de lecture : verdict, constats filtrables
+  et groupés par règle, périmètre testé et non testé par outil, puis les détails repliés (arbre des dossiers au fichier,
+  accès anonyme, dynamique, limites, exécution). Thème clair ou sombre ;
+- `corrections.md` : une fiche par constat, avec correctif indiqué et commande de vérification, à donner à l'IA du
+  projet scanné (les mêmes fiches se copient depuis le rapport) ;
 - `resume.json` : synthèse, comptes par sévérité, versions des outils ;
 - `gitleaks.json`, `osv.json`, `semgrep.json`, `zap.json` (avec `--zap`) : sorties brutes.
 

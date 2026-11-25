@@ -1,14 +1,16 @@
 """Dynamique avec OWASP ZAP. ZAP tourne dans son image officielle, lancée par scan.sh ; ce module prépare son plan et
-lit ses résultats, depuis l'image du kit.
+lit ses résultats, depuis l'image du kit. Avec un contrat OpenAPI, la préparation sonde aussi le refus de l'accès
+anonyme : un GET sans identité par lecture déclarée.
 
 Usage (dans le conteneur, avant le lancement de ZAP) :
   zap.py --url=<url> [--active] [--ajax] [--openapi=<url> | --openapi-file] [--allow-remote=<hôte>] [--network=<nom>]
 
 Entrées : /zap-spec (contrat OpenAPI local), variables SCAN_BUDGET et ZAP_SUBNETS (sous-réseaux du réseau désigné).
-Sortie dans /zap-work : plan.json (Automation Framework), meta.json, openapi.json.
+Sortie dans /zap-work : plan.json (Automation Framework), meta.json (avec la sonde), openapi.json.
 
 Codes de sortie : 0 plan prêt ; 2 cible refusée ou injoignable.
 """
+import html
 import http.client
 import ipaddress
 import json
@@ -17,8 +19,9 @@ import re
 import socket
 import ssl
 import sys
+import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 WORK = Path(os.environ.get("ZAP_WORK", "/zap-work"))
 SPEC = Path(os.environ.get("ZAP_SPEC", "/zap-spec"))
@@ -29,6 +32,15 @@ PHASES = {"openapi": "Import OpenAPI", "spider": "Spider", "spiderAjax": "AJAX s
           "passiveScan-wait": "Analyse passive", "activeScan": "Scan actif"}
 RISK = {"3": "high", "2": "medium", "1": "low"}
 WRITES = ("post", "put", "patch", "delete")
+METHODS = ("get", "head", "options", "trace", *WRITES)
+# Sonde anonyme : bornée pour tenir dans la marge entre le budget du scan et les 10 minutes.
+PROBE_SECONDS = 20
+PROBE_TIMEOUT = 3
+PROBE_MAX = 500
+PROBE_FAILURES = 5
+PROBE_VALUE = "security-kit-probe"
+PROBE_UUID = "00000000-0000-0000-0000-000000000000"
+REFUSAL = (401, 403)
 
 
 class Refused(Exception):
@@ -99,21 +111,34 @@ def authorize(host, subnets, allow_remote, resolver=resolve):
     return internal, local
 
 
-def fetch(scheme, host, port, path, host_header, local, limit=65536):
-    """GET sans suivre les redirections. Certificat vérifié, sauf cible locale (certificats de développement)."""
+def fetch(scheme, host, port, path, host_header, local, limit=65536, timeout=10, deadline=None):
+    """GET sans suivre les redirections, sans cookie ni jeton. Certificat vérifié, sauf cible locale (certificats de
+    développement). Avec une échéance, le corps est lu par morceaux et abandonné à son terme (flux sans fin)."""
     if scheme == "https":
         context = ssl.create_default_context()
         if local:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
         # nosemgrep: python.lang.security.audit.httpsconnection-detected.httpsconnection-detected
-        conn = http.client.HTTPSConnection(host, port, timeout=10, context=context)
+        conn = http.client.HTTPSConnection(host, port, timeout=timeout, context=context)
     else:
-        conn = http.client.HTTPConnection(host, port, timeout=10)
+        conn = http.client.HTTPConnection(host, port, timeout=timeout)
     try:
         conn.request("GET", path, headers={"Host": host_header, "User-Agent": "security-kit"})
         r = conn.getresponse()
-        return r.status, r.getheader("Location") or "", r.read(limit + 1)
+        if deadline is None:
+            body = r.read(limit + 1)
+        else:
+            body = b""
+            try:
+                while len(body) <= limit and time.monotonic() < deadline:
+                    chunk = r.read1(limit + 1 - len(body))
+                    if not chunk:
+                        break
+                    body += chunk
+            except (OSError, http.client.HTTPException):
+                pass  # le code de réponse est acquis : un corps interrompu ne le remet pas en cause
+        return r.status, r.getheader("Location") or "", body
     finally:
         conn.close()
 
@@ -121,7 +146,7 @@ def fetch(scheme, host, port, path, host_header, local, limit=65536):
 def confine_spec(text, target, active):
     """Contrat réécrit pour ne désigner que l'origine visée : sans quoi ZAP appellerait les serveurs qu'il déclare.
     En passif, les opérations d'écriture sont retirées : l'import appelle chaque opération déclarée.
-    Renvoie (contrat OpenAPI 3 ou Swagger 2, nombre d'opérations retirées)."""
+    Renvoie (contrat OpenAPI 3 ou Swagger 2, nombre d'opérations retirées, opérations déclarées avant retrait)."""
     try:
         spec = json.loads(text)
     except ValueError:
@@ -150,6 +175,7 @@ def confine_spec(text, target, active):
         first = str((servers[0] or {}).get("url", ""))
         base = urlsplit(first).path if "{" not in first else ""  # préfixe conservé (/api/v1), variables abandonnées
         spec["servers"] = [{"url": target + ("/" + base.strip("/") if base.strip("/") else "")}]
+    declared = operations(spec)
     removed = 0
     for item in (spec.get("paths") or {}).values():  # serveurs propres à un chemin ou à une opération
         if isinstance(item, dict):
@@ -162,7 +188,133 @@ def confine_spec(text, target, active):
             for op in item.values():
                 if isinstance(op, dict):
                     op.pop("servers", None)
-    return spec, removed
+    return spec, removed, declared
+
+
+def pointer(spec, node):
+    """Suit les références internes (#/...) d'un nœud ; {} si elles ne mènent nulle part."""
+    for _ in range(10):
+        if not (isinstance(node, dict) and isinstance(node.get("$ref"), str)):
+            return node if isinstance(node, dict) else {}
+        found = spec
+        for part in node["$ref"][2:].split("/"):
+            part = part.replace("~1", "/").replace("~0", "~")
+            found = found.get(part) if isinstance(found, dict) else None
+        node = found
+    return {}
+
+
+def dummy(spec, parameter):
+    """Valeur factice d'un paramètre de chemin. Ni exemple ni valeur par défaut : ils peuvent désigner un objet réel."""
+    schema = pointer(spec, parameter.get("schema") or parameter)
+    if schema.get("format") == "uuid":
+        return PROBE_UUID
+    return "0" if schema.get("type") in ("integer", "number") else PROBE_VALUE
+
+
+def base_path(spec):
+    raw = spec.get("basePath") if "swagger" in spec else urlsplit(str(spec["servers"][0]["url"])).path
+    return "/" + str(raw or "").strip("/") if str(raw or "").strip("/") else ""
+
+
+def operations(spec):
+    """Opérations du contrat : chemin déclaré, chemin à appeler (préfixe et valeurs factices) et accès. Protégée : son
+    security effectif (le sien, sinon le global) n'est pas vide et n'admet pas l'anonyme ({})."""
+    prefix, found = base_path(spec), []
+    for path, node in (spec.get("paths") or {}).items():
+        item = pointer(spec, node)
+        for method, op in item.items():
+            if str(method).lower() not in METHODS or not isinstance(op, dict):
+                continue
+            security = op["security"] if "security" in op else spec.get("security")
+            params = {}
+            for raw in [*(item.get("parameters") or []), *(op.get("parameters") or [])]:
+                p = pointer(spec, raw)
+                if p.get("in") == "path":
+                    params[p.get("name")] = p
+            full = prefix + "/" + str(path).lstrip("/")
+            call = re.sub(r"\{([^{}]*)\}", lambda m: dummy(spec, params.get(m[1], {})), full)
+            found.append({"method": str(method).upper(), "path": full,
+                          "call": quote(call, safe="/:@!$&'()*+,;=-._~%"),
+                          "access": "protected" if security and {} not in security else "public"})
+    return found
+
+
+# ------------------------------------------------------------------------------------------------------ sonde anonyme
+
+def probe(ops, get, prefix="", seconds=PROBE_SECONDS, clock=time.monotonic):
+    """Un GET sans identité par lecture déclarée : une opération protégée doit répondre 401 ou 403.
+    get(chemin, délai, échéance) renvoie (code, redirection, corps). Les écritures ne sont jamais appelées.
+    Ne conserve que méthode, chemin, accès, code et verdict."""
+    deadline, failures, calls = clock() + seconds, 0, 0
+
+    def call(path):
+        nonlocal failures, calls
+        left = deadline - clock()
+        if left <= 0 or failures >= PROBE_FAILURES:
+            return None
+        calls += 1
+        try:
+            status, _, body = get(path, min(PROBE_TIMEOUT, left), deadline)
+        except (OSError, ValueError, http.client.HTTPException):
+            failures += 1
+            return 0, b""
+        failures = 0
+        return status, body
+
+    control = call(prefix + "/" + PROBE_VALUE + "-inexistant")
+    # Publiques d'abord : elles servent de témoins, même si le temps manque ensuite.
+    answers, reads = {}, [i for i, o in enumerate(ops) if o["method"] == "GET"]
+    for i in sorted(reads, key=lambda i: ops[i]["access"] != "public")[:PROBE_MAX]:
+        answer = call(ops[i]["call"])
+        if answer is None:
+            break
+        answers[i] = answer
+    witnesses = ([s for i, (s, _) in answers.items() if s and ops[i]["access"] == "public"]
+                 or [s for s, _ in answers.values() if s])
+    refused_control = bool(control) and control[0] in REFUSAL
+    # Tout est refusé, route inexistante comprise : un filtre (hôte, WAF) donnerait le même résultat.
+    filtered = refused_control and all(s in REFUSAL for s in witnesses)
+    generic = control[1] if control and 200 <= control[0] < 300 else None
+    out = []
+    for i, o in enumerate(ops):
+        status, body = answers.get(i, (None, b""))
+        if o["method"] != "GET":
+            verdict = "untested"
+        elif status is None:
+            verdict = "unprobed"
+        elif not status:
+            verdict = "inconclusive"
+        elif o["access"] == "public":
+            verdict = "observed"
+        elif status in REFUSAL:
+            verdict = "inconclusive" if filtered else "refused"
+        elif 200 <= status < 300 and body != generic:
+            verdict = "open"
+        else:
+            verdict = "inconclusive"
+        out.append({"method": o["method"], "path": o["path"], "call": o["call"], "access": o["access"],
+                    "status": status or None, "verdict": verdict})
+    return {"operations": out, "control": (control[0] or None) if control else None, "filtered": filtered,
+            "requests": calls}
+
+
+def access_counts(access):
+    protected = [o for o in access["operations"] if o["access"] == "protected"]
+    return sum(o["verdict"] == "refused" for o in protected), sum(o["method"] == "GET" for o in protected)
+
+
+def open_item(op, url, version_label):
+    """Constat : lecture déclarée protégée qui répond à un appel sans identité. Champs attendus par les fiches."""
+    return {"sev": "high", "where": f"GET {url}"[:240], "rule": "KIT-ANON-01", "zone": "(dynamique)",
+            "msg": f"Route déclarée protégée accessible sans identité : {op['path']}"[:240],
+            "details": "Le contrat OpenAPI exige une authentification pour cette lecture. Un GET envoyé sans cookie ni jeton "
+                       f"a reçu {op['status']}. Soit le contrôle d'accès manque, soit le contrat est faux.",
+            "fix": "Exiger l'authentification sur cette route (401 ou 403 sans identité), ou corriger le security du contrat "
+                   "si la route est volontairement publique.",
+            "refs": ["https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/"],
+            "evidence": f"GET {url} · code {op['status']} · aucun cookie ni jeton envoyé"[:600],
+            "tools": [{"name": version_label, "detail": f"GET sans identité · réponse {op['status']}"}]}
 
 
 def limits(budget, active, ajax):
@@ -229,7 +381,7 @@ def prepare(opts, subnets, budget):
             raise Refused(f"la cible redirige vers une autre origine ({dest}) : passer l'URL finale à --zap")
     openapi = opts.get("openapi") or ("fichier local" if "openapi-file" in opts else "")
     active, ajax = "active" in opts, "ajax" in opts
-    skipped = 0
+    skipped, access = 0, None
     if openapi:
         if "openapi" in opts:
             s, h, p, spec_path = parse_url(opts["openapi"])
@@ -245,11 +397,16 @@ def prepare(opts, subnets, budget):
             raw = SPEC.read_bytes()
         if len(raw) > SPEC_MAX:
             raise Refused("contrat OpenAPI de plus de 10 Mo")
-        spec, skipped = confine_spec(raw.decode("utf-8", "replace"), target, active)
+        spec, skipped, declared = confine_spec(raw.decode("utf-8", "replace"), target, active)
         (WORK / "openapi.json").write_text(json.dumps(spec, default=str), encoding="utf-8")
-    meta = {"url": shown + path, "origin": shown, "internal_origin": target, "path": path,
+    plan_limits = limits(budget, active, ajax)  # budget refusé avant d'envoyer la moindre requête de sonde
+    if openapi:
+        access = probe(declared, lambda p, timeout, deadline: fetch(scheme, internal, port, p, header, local,
+                                                                     timeout=timeout, deadline=deadline),
+                       base_path(spec))
+    meta = {"access": access, "url": shown + path, "origin": shown, "internal_origin": target, "path": path,
             "host_header": header if internal != host else "", "active": active, "ajax": ajax, "openapi": openapi,
-            "skipped_operations": skipped, "remote": not local, "network": opts.get("network", ""), "limits": limits(budget, active, ajax)}
+            "skipped_operations": skipped, "remote": not local, "network": opts.get("network", ""), "limits": plan_limits}
     (WORK / "plan.json").write_text(json.dumps(build_plan(meta, str(WORK)), indent=2), encoding="utf-8")
     (WORK / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
     return meta
@@ -288,6 +445,21 @@ def parse_phases(log, lim):
     return phases, found
 
 
+def plain(text):
+    """Les descriptions ZAP sont en HTML : texte simple, un paragraphe par ligne."""
+    text = re.sub(r"</p>|<br\s*/?>", "\n", str(text or ""))
+    return re.sub(r"\n{2,}", "\n", html.unescape(re.sub(r"<[^>]+>", "", text))).strip()
+
+
+def evidence(instances):
+    lines = []
+    for i in instances[:10]:
+        extra = " · ".join(f"{label} : {str(i[k])[:200]}" for k, label in
+                           (("param", "paramètre"), ("attack", "attaque"), ("evidence", "preuve")) if i.get(k))
+        lines.append(f"{i.get('method', '')} {i.get('uri', '')}".strip()[:300] + (f" · {extra}" if extra else ""))
+    return "\n".join(lines)
+
+
 def results(work, out, version):
     meta = json.loads((work / "meta.json").read_text(encoding="utf-8"))
     log = read_log(work)
@@ -322,12 +494,20 @@ def results(work, out, version):
         first = inst[0]
         where = f"{first.get('method', '')} {first.get('uri', shown)}".strip()
         param = first.get("param")
-        items.append({"sev": level, "where": where[:240] + (f" (+{total - 1})" if total > 1 else ""),
+        items.append({"details": plain(alert.get("desc")), "fix": plain(alert.get("solution")),
+                      "refs": plain(alert.get("reference")).split()[:5], "evidence": evidence(inst),
+                      "sev": level, "where": where[:240] + (f" (+{total - 1})" if total > 1 else ""),
                       "rule": f"ZAP {alert.get('pluginid', '?')}",
                       "msg": alert.get("name", "") + (f" · paramètre {param}" if param else ""), "zone": "(dynamique)",
                       "tools": [{"name": f"OWASP ZAP {version}",
                                  "detail": ("scan actif" if meta["active"] else "analyse passive")
                                            + f" · {total} occurrence(s)"}]})
+    access = meta.get("access")
+    if access:
+        for op in access["operations"]:
+            if op["verdict"] == "open":
+                counts["high"] += 1
+                items.append(open_item(op, shown + op["call"], "Security Kit · sonde anonyme"))
     try:
         seen = display((work / "urls.txt").read_text(encoding="utf-8", errors="replace")).split()
     except OSError:
@@ -342,8 +522,9 @@ def results(work, out, version):
     partial = sum(p["partial"] for p in phases)
     note = (f"{'actif' if meta['active'] else 'passif'}, {len(urls)} URL, {sum(counts.values())} alerte(s)"
             + (f", {partial} phase(s) partielle(s)" if partial else "")
-            + (", AJAX spider sans résultat" if meta["ajax"] and not found.get("spiderAjax") else ""))
-    return {"counts": counts, "items": items, "informational": informational, "urls": sorted(urls),
+            + (", AJAX spider sans résultat" if meta["ajax"] and not found.get("spiderAjax") else "")
+            + (", refus anonyme {}/{}".format(*access_counts(access)) if access else ""))
+    return {"access": access, "counts": counts, "items": items, "informational": informational, "urls": sorted(urls),
  "phases": phases, "found": found,
             **{k: meta[k] for k in ("url", "active", "ajax", "openapi", "skipped_operations", "remote", "network")}, "note": note}
 
@@ -360,6 +541,10 @@ def main(argv):
         return 2
     print(f"Cible ZAP : {meta['url']} · {'ACTIF (attaques)' if meta['active'] else 'passif'}"
           f"{' · HÔTE DISTANT' if meta['remote'] else ''}")
+    if meta["access"]:
+        refused, total = access_counts(meta["access"])
+        print(f"Sonde anonyme : {meta['access']['requests']} requête(s) GET, {refused}/{total} lecture(s) protégée(s) "
+              "refusent l'appel sans identité")
     return 0
 
 

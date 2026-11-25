@@ -300,6 +300,18 @@ def copy_loose(files):
     return skipped
 
 
+SECRET_FIX = ("Révoquer et renouveler le secret, puis le retirer du code. Présent dans l'historique git, il reste exposé "
+              "après suppression. Faux positif : l'autoriser avec justification dans tests/security/gitleaks.toml.")
+
+
+def fixed_versions(vulns, package):
+    """Versions corrigées annoncées par OSV pour ce paquet (une par branche maintenue ; les commits git sont écartés)."""
+    found = {e["fixed"] for v in vulns for a in v.get("affected") or []
+             if (a.get("package") or {}).get("name") == package
+             for r in a.get("ranges") or [] if r.get("type") != "GIT" for e in r.get("events") or [] if "fixed" in e}
+    return sorted(found, key=lambda v: [int(n) if n.isdigit() else 0 for n in re.split(r"\D+", v)])
+
+
 def secrets(inv):
     """Historique git, modifications indexées et non indexées, fichiers non suivis. Dépôt git sans commit : tous les
     fichiers du répertoire de travail. Sans git : le répertoire."""
@@ -355,7 +367,7 @@ def secrets(inv):
                  "dir": "répertoire"}
     items = [{"sev": "critical", "where": f"{f['File']}:{f.get('StartLine')}", "rule": f.get("RuleID", ""),
               "msg": f"commit {str(f['Commit'])[:8]}" if f.get("Commit") else passes_fr[f["_pass"]],
-              "zone": zone_of(f["File"]),
+              "zone": zone_of(f["File"]), "details": f.get("Description", ""), "fix": SECRET_FIX,
               "tools": [{"name": f"gitleaks {VERSIONS['gitleaks']}",
                          "detail": f"règle {f.get('RuleID', '')} · {passes_fr[f['_pass']]}"}]}
              for f in found]
@@ -393,7 +405,14 @@ def deps(inv):
                 ids = g.get("ids") or []
                 gid = ids[0] if ids else None
                 pkg = p["package"]
-                items.append({"sev": level, "where": f"{pkg['name']}@{pkg['version']} · {rel}", "rule": gid or "",
+                vulns = [by_id[i] for i in ids if i in by_id]
+                fixed = fixed_versions(vulns, pkg["name"])
+                refs = [r["url"] for v in vulns for r in v.get("references") or [] if r.get("url")]
+                items.append({"details": (by_id.get(gid) or {}).get("details", ""),
+                              "fix": (f"Mettre à jour {pkg['name']} (installé : {pkg['version']}). Versions corrigées selon "
+                                      f"OSV : {', '.join(fixed)}.") if fixed else
+                                     f"Aucune version corrigée annoncée par OSV pour {pkg['name']} {pkg['version']}.",
+                              "refs": list(dict.fromkeys(refs))[:5], "sev": level, "where": f"{pkg['name']}@{pkg['version']} · {rel}", "rule": gid or "",
                               "msg": (by_id.get(gid) or {}).get("summary", ""), "zone": zone_of(rel),
                               "tools": [{"name": f"OSV-Scanner {VERSIONS['osv']}",
                                          "detail": f"base OSV.dev · {', '.join(ids[:3])} · {pkg.get('ecosystem', '')}"}]})
@@ -502,7 +521,12 @@ def code(inv):
         c[level] += 1
         rid = rule_id(f["check_id"])
         origin = ", ".join(rule_packs.get(rid, [])) or "registre"
-        items.append({"sev": level, "where": f"{f['path']}:{f['start']['line']}", "rule": rid,
+        meta = extra.get("metadata") or {}
+        refs = [*(meta.get("references") or []), meta.get("shortlink")]
+        items.append({"details": str(extra.get("message", "")),
+                      "fix": f"Remplacement proposé par la règle :\n{extra['fix']}" if extra.get("fix") else "",
+                      "refs": [str(r) for r in refs if r][:5],
+                      "sev": level, "where": f"{f['path']}:{f['start']['line']}", "rule": rid,
                       "msg": str(extra.get("message", "")).split("\n")[0][:240], "zone": zone_of(f["path"]),
                       "tools": [{"name": f"Semgrep {VERSIONS['semgrep']}", "detail": f"pack {origin}"}]})
     # Un fichier en erreur d'analyse figure quand même dans paths.scanned : il ne doit pas compter comme couvert.
@@ -572,7 +596,8 @@ def skill(inv):
         for p in summary["pistes"]:
             if p["verdict"] == "confirmed":
                 counts[p["severity"]] += 1
-                items.append({"sev": p["severity"], "where": p["where"], "rule": p["fingerprint"][:120], "msg": p["title"],
+                items.append({"details": p["reason"], "fix": (p["triage"] or {}).get("rationale", ""),
+                              "sev": p["severity"], "where": p["where"], "rule": p["fingerprint"][:120], "msg": p["title"],
                               "zone": "(audit)", "tools": [{"name": "Audit par agent", "detail": f"skill {VERSIONS['skill']}, confirmé"}]})
     present = [k for k, v in validated.items() if v != "absent"]
     note = "intégrité OK (build), " + (", ".join(f"{k} {v}" for k, v in validated.items()) if present else "pas d'audit monté")
@@ -730,6 +755,15 @@ def main(argv):
     for z, v in data["inventory"]["zones"].items():
         v.update({k: cov[z][k] for k in keys})
     total = sum(cov.values(), Counter())
+    # État de chaque fichier, pour l'arbre du rapport : ok, part, miss, test, na (hors code).
+    code_ran = "code" in only and "error" not in summary.get("code", {})
+    states = {}
+    for f in inv["files"]:
+        why = uncovered_reason(f, scanned, patterns, unparsed, partial) if code_ran else "other"
+        kind = ("na" if lang_of(f) not in ANALYSABLE else
+                {"scanned": "ok", "partial": "part", "tests": "test"}.get(why, "miss"))
+        states.setdefault(kind, []).append(f)
+    data["inventory"]["file_states"] = states
     data["inventory"].update({"analysable": len(analysable_files), "analysable_scanned": total["scanned"],
                               **{k: total[k] for k in keys if k != "scanned"}})
 
@@ -738,6 +772,7 @@ def main(argv):
     (OUT / "resume.json").write_text(json.dumps(resume, indent=2, ensure_ascii=False), encoding="utf-8")
 
     (OUT / "report.html").write_text(report.render(data), encoding="utf-8")
+    (OUT / "corrections.md").write_text(report.corrections(data), encoding="utf-8")
 
     print(f"\nCritique {critical} · haut {high} · durée {fmt_t(duration)}")
     print(f"Rapport : {os.environ.get('HOST_OUT', OUT)}/report.html")

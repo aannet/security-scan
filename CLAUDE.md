@@ -22,7 +22,8 @@ Rappel des invariants :
 - `scanner/Dockerfile` : image (outils et règles Semgrep épinglés au build). Source unique des versions : exposées en `ENV`, lues par `scan.py` (`VERSIONS`), jamais écrites en dur ailleurs.
 - `scanner/scan.py` : orchestrateur parallèle et progression console.
 - `scanner/report.py` : rendu du dashboard HTML.
-- `scanner/zap.py` : dynamique : contrôle de la cible, plan ZAP, lecture des résultats (ZAP tourne dans son image, lancée par `scan.sh`).
+- `design.md` : design system du rapport ; les écarts assumés (polices système, entre autres) sont listés dans `report.py`.
+- `scanner/zap.py` : dynamique : contrôle de la cible, sonde anonyme, plan ZAP, lecture des résultats (ZAP tourne dans son image, lancée par `scan.sh`).
 - Après une modification de `scanner/`, relancer avec `--rebuild` : l'image n'est pas reconstruite automatiquement.
 - `reports/<horodatage>-<dépôt>/` : rapports de scan (générés, ignorés par git, hors du contexte de build).
 - `.agents/skills/security-audit/` : skill d'audit Cloudflare (MIT), version figée dans `skills-lock.json`, licence dans `LICENSES/`. L'image clone sa propre copie épinglée.

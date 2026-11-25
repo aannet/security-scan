@@ -14,7 +14,7 @@ dépendance** sur la machine qui l'exécute.
 | 3 | Rapide | **≤ 10 minutes** pour un scan complet. Étapes en parallèle, budget global avec timeout par étape |
 | 4 | Progression visible | dans la console, étapes qui se ferment au fil de l'eau. Pas de serveur, pas de fichier de suivi |
 | 5 | Empreinte minimale | tout asset de suivi créé pendant le scan est supprimé à la fin. Seuls restent les rapports |
-| 6 | Rapport final HTML | dashboard autonome (sans dépendance externe) : KPIs, zones couvertes, zones non couvertes |
+| 6 | Rapport final HTML | dashboard autonome (sans dépendance externe) : verdict, constats, zones couvertes et non couvertes. Un résultat se lit sans défiler ; une couleur a un seul sens |
 | 7 | Lecture seule | le dépôt scanné n'est jamais modifié ; conteneur durci (read-only, non root, sans capacités) |
 
 ## Dynamique (option `--zap`)
@@ -31,6 +31,7 @@ ZAP teste une application **déjà lancée**, dont on fournit l'URL. Sans `--zap
 | D6 | Découverte | spider HTML ; AJAX spider (`--zap-ajax`) et contrat OpenAPI (`--zap-openapi`) en option |
 | D7 | Conteneur durci | lecture seule, non root, sans capacités, sans élévation, mémoire et processus plafonnés |
 | D8 | Honnête | le rapport donne le mode, les URL visitées, les phases interrompues et ce qui reste non testé |
+| D9 | Refus anonyme mesuré | avec un contrat OpenAPI, un GET sans identité par lecture déclarée : une lecture protégée doit répondre 401 ou 403. Vert réservé à ce refus vérifié ; un 2xx est un constat « haut ». Jamais d'écriture ; seuls méthode, chemin, accès, code et verdict sont conservés |
 
 Limites assumées :
 
@@ -38,7 +39,10 @@ Limites assumées :
   les `GET` à effet de bord restent possibles, et l'AJAX spider clique dans l'interface : il peut modifier les données.
   Avec l'AJAX spider ou le scan actif, n'utiliser que des données jetables ;
 - le navigateur (AJAX spider, règle DOM XSS) charge les scripts et styles tiers de la page, comme tout visiteur ;
-  ZAP ne les attaque pas.
+  ZAP ne les attaque pas ;
+- le refus anonyme (D9) ne prouve ni le cloisonnement entre utilisateurs ni la résistance aux injections. Il utilise des
+  identifiants factices et aucun paramètre de requête : une application qui cherche l'objet avant de contrôler
+  l'identité répond 404, verdict « non concluant ». La sonde est bornée à 20 s et 500 lectures.
 
 ## Ce que le kit ne couvre pas encore
 

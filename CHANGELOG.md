@@ -3,6 +3,31 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.4.0 - 2026-11-25
+
+### Modifié
+
+- Rapport réorganisé : verdict en une phrase avec sa règle, constats en deuxième position avec le correctif indiqué,
+  tableau « Périmètre » (outil, état, testé, non testé), preuves repliées. Barre latérale, thème clair ou sombre au
+  choix, habillage `design.md` en polices système, lignes de tableau alternées.
+- Une couleur, un sens : bleu analysé, vert refus vérifié, hachuré non testé, teintes chaudes pour constat ou erreur.
+- Zones : arbre des dossiers jusqu'au fichier, à la place du tableau par zone ; `resume.json` enregistre l'état de
+  chaque fichier (`inventory.file_states`).
+- Constats d'une même règle groupés sur une ligne, copiables ensemble.
+
+### Corrigé
+
+- Couverture du code affichée à 99 % en tête et 100 % dans sa carte : un seul calcul.
+- Échec dû à une étape en erreur affiché avec « 0 critique » sans cause : le verdict la nomme.
+- Sévérité « Inconnu » absente des décomptes.
+
+### Ajouté
+
+- Fiches de correction : `corrections.md` à côté du rapport, une fiche autonome par constat (description, correctif
+  indiqué, références, commande de vérification), à donner à l'IA du projet scanné ; boutons de copie dans le rapport.
+- Sonde anonyme (avec `--zap-openapi`) : un `GET` sans identité par lecture du contrat ; section « Accès anonyme » du
+  rapport, vert pour chaque refus vérifié, constat « haut » (`KIT-ANON-01`) si une lecture protégée répond.
+
 ## 1.3.0 - 2026-11-25
 
 ### Ajouté
