@@ -3,6 +3,22 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.5.0 - 2026-11-26
+
+### Ajouté
+
+- Assistant `/scan`, skill Claude Code facultatif (`.claude/skills/scan/`) : questions sur le dépôt, le profil, la cible,
+  le contrat OpenAPI et le mode, confirmation des données jetables et de l'autorisation sur un hôte distant, commande
+  `scan.sh` affichée puis lancée après accord. Les options de `scan.sh` sont inchangées.
+- Logo SECK (`assets/logo/`, SVG pour fond clair et sombre) dans le README, et intégré au rapport : barre latérale
+  et icône d'onglet, sans ressource externe.
+- Aperçu de dépôt `assets/logo/seck-apercu.png` (1280×640).
+
+### Modifié
+
+- Le kit s'appelle SECK : README, rapport, console, `--version` et libellé de l'image. Le dépôt, le tag de l'image
+  (`security-kit:<version>`) et les noms de conteneurs ne changent pas.
+
 ## 1.4.0 - 2026-11-25
 
 ### Modifié

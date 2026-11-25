@@ -507,7 +507,7 @@ def results(work, out, version):
         for op in access["operations"]:
             if op["verdict"] == "open":
                 counts["high"] += 1
-                items.append(open_item(op, shown + op["call"], "Security Kit · sonde anonyme"))
+                items.append(open_item(op, shown + op["call"], "SECK · sonde anonyme"))
     try:
         seen = display((work / "urls.txt").read_text(encoding="utf-8", errors="replace")).split()
     except OSError:

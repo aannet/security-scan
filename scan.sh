@@ -1,5 +1,5 @@
 #!/bin/sh
-# Security Kit : scan d'un dépôt quelconque (statique, et dynamique ZAP en option). Seule dépendance : Docker.
+# SECK : scan d'un dépôt quelconque (statique, et dynamique ZAP en option). Seule dépendance : Docker.
 #
 #   ./scan.sh <chemin-du-dépôt> [--strict] [--only=secrets,deps,code,skill] [--audit=<dossier>] [--rebuild]
 #   ./scan.sh <chemin-du-dépôt> --zap=<url> [--zap-active] [--zap-ajax] [--zap-openapi=<fichier|url>]
@@ -18,7 +18,7 @@ BUDGET=${SCAN_BUDGET:-570}
 
 usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 1 ] || usage
-case "$1" in -h|--help) usage ;; --version) echo "Security Kit $VERSION"; exit 0 ;; esac
+case "$1" in -h|--help) usage ;; --version) echo "SECK $VERSION"; exit 0 ;; esac
 [ -d "$1" ] || { echo "Dépôt introuvable : $1" >&2; exit 2; }
 REPO=$(CDPATH= cd -- "$1" && pwd)
 shift

@@ -5,6 +5,7 @@ import html
 import json
 import re
 from collections import Counter, defaultdict
+from urllib.parse import quote
 
 E = html.escape
 SEV = ("critical", "high", "medium", "low", "unknown")
@@ -12,6 +13,28 @@ SEV_FR = {"critical": "Critique", "high": "Haut", "medium": "Moyen", "low": "Bas
 TOOL_FR = {"secrets": "Secrets", "deps": "Dépendances", "code": "Code", "skill": "Audit", "zap": "Dynamique"}
 STEP_FR = {"inventory": "Inventaire", "secrets": "Secrets · gitleaks", "deps": "Dépendances · OSV-Scanner",
            "code": "Code · Semgrep", "skill": "Skill d'audit · validateurs", "zap": "Dynamique · OWASP ZAP"}
+
+# Logo SECK, recopié de assets/logo/ : horizontal pour la barre latérale (navy), icône en favicon.
+_HEX = (
+    'M585 204Q627 180 669 204L826 295Q868 319 868 367L868 538Q868 586 826 610L669 701Q627 725 585 701L428 610'
+    'Q386 586 386 538L386 367Q386 319 428 295ZM606 256Q627 244 648 256L789 337Q810 349 810 373L810 528Q810 55'
+    '2 789 564L648 645Q627 657 606 645L465 564Q444 552 444 528L444 373Q444 349 465 337ZM601 297Q627 282 653 2'
+    '97L749 352Q775 367 775 397L775 502Q775 532 749 547L653 602Q627 617 601 602L505 547Q479 532 479 502L479 3'
+    '97Q479 367 505 352ZM611 333Q627 324 643 333L721 379Q737 388 737 406L737 491Q737 509 721 518L643 564Q627 '
+    '573 611 564L533 518Q517 509 517 491L517 406Q517 388 533 379Z')
+_SEC = (
+    'M404 826V820C404 790 380 770 345 770H222C189 770 167 790 167 819V840C167 870 190 888 222 888H325C336 888'
+    ' 340 891 340 901C340 912 335 915 325 915H246C236 915 232 911 231 902H167V912C167 942 192 961 229 961H345'
+    'C382 961 404 940 404 910V892C404 860 382 843 346 843H245C235 843 231 839 231 830C231 821 236 817 245 817'
+    'H325C335 817 340 821 340 830H397C402 830 404 829 404 826ZM428 770H615V813H488V843H612V887H488V915H615V96'
+    '1H428ZM858 845V830C858 794 829 770 794 770H702C662 770 634 797 634 836V894C634 933 662 961 702 961H794C8'
+    '30 961 858 938 858 904V888H795C795 904 787 915 771 915H720C705 915 696 905 696 890V841C696 826 706 817 7'
+    '21 817H771C787 817 795 829 795 845Z')
+_MARK = f'<path fill="#059669" fill-rule="evenodd" d="{_HEX}"/>'
+LOGO = ('<svg class="logo" viewBox="347 152 2073 600" role="img" aria-label="SECK">' + _MARK +
+        f'<g transform="translate(737.9 -843.5) scale(1.4974)"><path fill="#FFFFFF" d="{_SEC}"/>'
+        '<path fill="#059669" d="M883 770H940V844L1016 770H1095L987 866L1095 961H1017L940 890V961H883Z"/></g></svg>')
+FAVICON = "data:image/svg+xml," + quote('<svg xmlns="http://www.w3.org/2000/svg" viewBox="347 172.5 560 560">' + _MARK + "</svg>")
 
 # Habillage : design.md (« Verdana Health »), avec ces écarts : polices système (rapport autonome) ; textes de statut
 # foncés pour atteindre 4,5:1 ; rouge critique foncé et orange « haut » ajoutés ; pas de vert sauge sur les liens (le vert
@@ -43,6 +66,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var
 
 /* Barre latérale : navy dans les deux thèmes. */
 aside{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--side);color:#F8FAFC;padding:24px 16px;display:flex;flex-direction:column;gap:16px}
+aside .logo{display:block;width:144px;height:auto;flex:none}
 aside .repo{font-size:20px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
 aside .state{font-size:14px;border-left:4px solid var(--unknown);padding-left:8px}
 aside .state.high{border-left-color:var(--high)}aside .state.fail{border-left-color:var(--error)}
@@ -540,7 +564,7 @@ def sorted_items(d):
 def context(d):
     g = d["git"]
     ref = f"commit {g.get('commit', '')[:10]}" + (" avec modifications locales" if g.get("dirty") else "") if g.get("git") else "sans git"
-    return f"Scan du {d['started']} UTC, {ref}, Security Kit {d.get('versions', {}).get('kit', '?')}."
+    return f"Scan du {d['started']} UTC, {ref}, SECK {d.get('versions', {}).get('kit', '?')}."
 
 
 def corrections(d):
@@ -956,7 +980,7 @@ def render(d):
 
     code, v = steps.get("code", {}), d.get("versions", {})
     dyn = f' · OWASP ZAP {E(v.get("zap", "?"))}' if "zap" in steps else ""
-    main.append(f'<footer>Security Kit {E(v.get("kit", "?"))} · gitleaks {E(v.get("gitleaks", "?"))} · OSV-Scanner {E(v.get("osv", "?"))} · '
+    main.append(f'<footer>SECK {E(v.get("kit", "?"))} · gitleaks {E(v.get("gitleaks", "?"))} · OSV-Scanner {E(v.get("osv", "?"))} · '
                 f'Semgrep {E(v.get("semgrep", "?"))}, règles figées le {E(code.get("rules_date", "—"))}'
                 f' ({E(", ".join(code.get("packs", [])))}) · skill cloudflare/security-audit-skill {E(v.get("skill", "?"))}'
                 f'{dyn} · image {E(v.get("arch", "?"))}. '
@@ -965,7 +989,7 @@ def render(d):
     links = (f'<a href="#verdict">Verdict</a><a href="#constats">Constats<em>{len(items)}</em></a><a href="#perimetre">Périmètre</a>'
              '<a href="#details">Détails</a>' + "".join(f'<a class="sub" href="#{f[0]}">{E(f[1])}</a>' for f in folds))
     return (f'<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>Scan · {E(d["repo"])}</title><style>{CSS}</style><script>{THEME_JS}</script></head><body><div class="app">'
-            f'<aside><div class="repo">{E(d["repo"])}</div><div class="state {kind}">{E(title)}</div>'
+            f'<title>Scan · {E(d["repo"])}</title><link rel="icon" href="{FAVICON}"><style>{CSS}</style><script>{THEME_JS}</script></head><body><div class="app">'
+            f'<aside>{LOGO}<div class="repo">{E(d["repo"])}</div><div class="state {kind}">{E(title)}</div>'
             f'<nav aria-label="Sections">{links}</nav><button id="theme" type="button">Changer de thème</button></aside><main>'
             + "".join(main) + f'</main></div><script>{JS}</script></body></html>')

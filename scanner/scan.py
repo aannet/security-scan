@@ -589,7 +589,7 @@ def skill(inv):
             counts["critical"] += 1
             validated["triage.json"] = "invalide"
             items.append({"sev": "critical", "where": "triage.json", "rule": "schéma triage", "msg": " ; ".join(errors)[:300],
-                          "zone": "(audit)", "tools": [{"name": "Security Kit", "detail": "contrôle de triage.json"}]})
+                          "zone": "(audit)", "tools": [{"name": "SECK", "detail": "contrôle de triage.json"}]})
         elif summary["triaged"]:
             validated["triage.json"] = "valide"
         # Constats confirmés par le skill : comptés avec leur sévérité, comme ceux des outils.
@@ -688,7 +688,7 @@ def main(argv):
         only = [*only, "zap"]
     names = ["inventory", *steps]
     board = Board(names)
-    print(f"\nSecurity Kit {VERSIONS['kit']} · {os.environ.get('REPO_NAME', SRC)} · budget {fmt_t(BUDGET)}\n", flush=True)
+    print(f"\nSECK {VERSIONS['kit']} · {os.environ.get('REPO_NAME', SRC)} · budget {fmt_t(BUDGET)}\n", flush=True)
     board.start()
 
     board.set("inventory", "run")

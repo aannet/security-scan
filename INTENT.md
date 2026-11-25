@@ -1,4 +1,4 @@
-# Intention — Security Kit
+# Intention — SECK
 
 ## Objectif
 

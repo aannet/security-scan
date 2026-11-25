@@ -1,4 +1,11 @@
-# Security Kit
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/logo/seck-horizontal-sombre.svg">
+    <img src="assets/logo/seck-horizontal.svg" alt="SECK" width="360">
+  </picture>
+</p>
+
+# SECK
 
 Scan de sécurité de **n'importe quel dépôt de code**, avec **Docker comme seule dépendance** : analyse statique, et en
 option test d'une application qui tourne avec OWASP ZAP.
@@ -17,6 +24,17 @@ L'image se construit au premier lancement (environ 1 minute), puis le scan s'aff
 Rapport : `reports/<horodatage>-<dépôt>/report.html`.
 
 Prérequis : Docker et un `sh` POSIX. Linux, macOS ou Windows (WSL), en x86_64 comme en ARM64 (Apple Silicon, Graviton).
+
+## Assistant `/scan` (facultatif)
+
+Avec [Claude Code](https://claude.com/claude-code), pas besoin de connaître les options : lancer `claude` dans le dossier
+du kit, accepter la confiance au dossier, puis taper `/scan`. L'assistant demande le dépôt et le type de scan, aide à
+trouver la cible et le contrat OpenAPI, affiche la commande `scan.sh` et la lance après confirmation. Il annonce le
+risque sur les données avant un scan AJAX ou actif.
+
+Il s'appuie sur la sortie console et a pour consigne de ne pas lire les constats ; c'est une consigne au modèle, pas un
+verrou technique. Rien à installer dans le kit. Sans Claude Code, `scan.sh` et ce README suffisent ; en CI, utiliser
+`scan.sh`.
 
 ## Options
 

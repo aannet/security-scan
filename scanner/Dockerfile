@@ -1,4 +1,4 @@
-# Security Kit : image de scan statique pour n'importe quel dépôt. Seule dépendance hôte : Docker.
+# SECK : image de scan statique pour n'importe quel dépôt. Seule dépendance hôte : Docker.
 # Outils épinglés : gitleaks, OSV-Scanner, Semgrep (+ règles Semgrep figées au build), skill d'audit Cloudflare.
 # Multi-architecture : amd64 (x86_64) et arm64 (Apple Silicon, Graviton, Raspberry Pi 64 bits). L'architecture est
 # celle de l'image de base, donc celle de l'hôte par défaut ; forcer avec docker build --platform linux/arm64.
@@ -81,7 +81,7 @@ ARG KIT_VERSION=dev
 # de l'index multi-architecture (amd64, arm64) ; add-ons et règles sont figés avec elle. Changer la version ET le digest.
 ARG ZAP_VERSION=2.17.0
 ARG ZAP_DIGEST=sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
-LABEL org.opencontainers.image.title="Security Kit" org.opencontainers.image.version=${KIT_VERSION}
+LABEL org.opencontainers.image.title="SECK" org.opencontainers.image.version=${KIT_VERSION}
 # Versions : source unique, reprise par scan.py pour le rapport.
 ENV HOME=/tmp SEMGREP_SEND_METRICS=off SEMGREP_ENABLE_VERSION_CHECK=0 PYTHONIOENCODING=utf-8 \
     SKILL_DIR=/opt/security-audit-skill/skills/security-audit RULES_DIR=/opt/rules \
