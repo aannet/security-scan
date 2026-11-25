@@ -3,6 +3,12 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.7.1 - 2026-11-26
+
+### Ajouté
+
+- `/seck-scan` affiche au lancement une bannière « SECK » en grandes lettres.
+
 ## 1.7.0 - 2026-11-26
 
 ### Ajouté

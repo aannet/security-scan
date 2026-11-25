@@ -10,6 +10,20 @@ disable-model-invocation: true
 La personne connaît son application, pas le kit. Le but : lancer le bon scan sans qu'elle ait à connaître les options.
 Elle découvre le kit au fil des questions. Écrire en français, style direct.
 
+## Bannière
+
+Au lancement, avant tout appel d'outil et toute question, afficher cette bannière telle quelle, dans un bloc de code,
+une seule fois :
+
+```text
+███████╗███████╗ ██████╗██╗  ██╗
+██╔════╝██╔════╝██╔════╝██║ ██╔╝
+███████╗█████╗  ██║     █████╔╝
+╚════██║██╔══╝  ██║     ██╔═██╗
+███████║███████╗╚██████╗██║  ██╗
+╚══════╝╚══════╝ ╚═════╝╚═╝  ╚═╝
+```
+
 ## Avant la première question
 
 Lire `scan.sh` et `README.md` à la racine du kit. Ils font foi : options, conditions, durées, codes de sortie, limites.
