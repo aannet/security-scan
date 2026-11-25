@@ -1,5 +1,5 @@
 ---
-name: scan
+name: seck-scan
 description: Assistant de SECK. Pose quelques questions, compose la commande scan.sh, l'affiche et la lance après confirmation. À utiliser quand la personne veut scanner un dépôt ou une application avec le kit.
 argument-hint: "[chemin du dépôt]"
 disable-model-invocation: true

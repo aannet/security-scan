@@ -18,7 +18,7 @@ Rappel des invariants :
 
 - `VERSION` : version du kit (SemVer), source unique. `scan.sh` en fait le tag de l'image et la passe au build (`KIT_VERSION`) ; affichée en console et dans le rapport. L'incrémenter à chaque modification livrée de `scanner/` ou `scan.sh`, avec une entrée dans `CHANGELOG.md`, un tag `vX.Y.Z` et une release GitHub sur ce tag (titre `X.Y.Z`, notes reprises du `CHANGELOG.md`), créée une fois le tag poussé.
 - `scan.sh` : lanceur (build de l'image si absente, puis scan).
-- `.claude/skills/scan/` : assistant `/scan`, skill Claude Code facultatif qui compose et lance `scan.sh`. Les garde-fous restent dans `scan.sh` et `zap.py` ; à relire quand les options ou la sortie console changent (cadrage : `docs/brief-wizard.md`).
+- `.claude/skills/seck-scan/` : assistant `/seck-scan`, skill Claude Code facultatif qui compose et lance `scan.sh`. Les garde-fous restent dans `scan.sh` et `zap.py` ; à relire quand les options ou la sortie console changent (cadrage : `docs/brief-wizard.md`).
 - `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py`, `report.py` et `zap.py`.
 - `scanner/Dockerfile` : image (outils et règles Semgrep épinglés au build). Source unique des versions : exposées en `ENV`, lues par `scan.py` (`VERSIONS`), jamais écrites en dur ailleurs.
 - `scanner/scan.py` : orchestrateur parallèle et progression console.

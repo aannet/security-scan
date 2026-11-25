@@ -25,10 +25,10 @@ Rapport : `reports/<horodatage>-<dépôt>/report.html`.
 
 Prérequis : Docker et un `sh` POSIX. Linux, macOS ou Windows (WSL), en x86_64 comme en ARM64 (Apple Silicon, Graviton).
 
-## Assistant `/scan` (facultatif)
+## Assistant `/seck-scan` (facultatif)
 
 Avec [Claude Code](https://claude.com/claude-code), pas besoin de connaître les options : lancer `claude` dans le dossier
-du kit, accepter la confiance au dossier, puis taper `/scan`. L'assistant demande le dépôt et le type de scan, aide à
+du kit, accepter la confiance au dossier, puis taper `/seck-scan`. L'assistant demande le dépôt et le type de scan, aide à
 trouver la cible et le contrat OpenAPI, affiche la commande `scan.sh` et la lance après confirmation. Il annonce le
 risque sur les données avant un scan AJAX ou actif.
 

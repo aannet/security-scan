@@ -3,6 +3,12 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.6.0 - 2026-11-26
+
+### Modifié
+
+- L'assistant `/scan` devient `/seck-scan` (`.claude/skills/seck-scan/`). L'ancien nom ne répond plus.
+
 ## 1.5.0 - 2026-11-26
 
 ### Ajouté

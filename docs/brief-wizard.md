@@ -1,4 +1,4 @@
-# Brief — skill `/scan`, assistant de SECK
+# Brief — skill `/seck-scan`, assistant de SECK
 
 Rédigé le 2026-11-25, à partir de [handoff-wizard.md](handoff-wizard.md). Aucun code écrit.
 
@@ -12,8 +12,8 @@ Rédigé le 2026-11-25, à partir de [handoff-wizard.md](handoff-wizard.md). Auc
 
 ## Forme
 
-- Skill Claude Code livré dans le kit : `.claude/skills/scan/SKILL.md`. Rien à installer.
-- La personne clone le kit, lance `claude` dans son dossier, accepte la confiance au dossier, puis tape `/scan`.
+- Skill Claude Code livré dans le kit : `.claude/skills/seck-scan/SKILL.md`. Rien à installer.
+- La personne clone le kit, lance `claude` dans son dossier, accepte la confiance au dossier, puis tape `/seck-scan`.
 - Questions à choix, comme dans une session Claude ; saisie libre pour les chemins et les URL.
 - Le skill compose la commande `scan.sh`, l'affiche et la lance après confirmation. La ligne de commande reste la
   référence, notamment en CI.
@@ -68,7 +68,7 @@ mode voulu, aucun risque sur les données accepté sans l'avoir vu.
 
 ## Livraison
 
-- **Version cible (à confirmer) :** 1.5.0. La 1.4.0, non publiée, porte la sonde d'accès anonyme.
+- **Versions :** skill livré en 1.5.0 sous le nom `/scan`, renommé `/seck-scan` en 1.6.0.
 - Fichiers touchés : le skill, la carte de `CLAUDE.md`, le README, le `CHANGELOG.md`.
 
 ## Recette
@@ -85,7 +85,7 @@ mode voulu, aucun risque sur les données accepté sans l'avoir vu.
 ## À vérifier à l'implémentation
 
 - La sortie console ne contient aucun détail de constat.
-- `/scan` n'entre pas en conflit avec une commande ou un skill existant.
+- `/seck-scan` n'entre pas en conflit avec une commande ou un skill existant.
 - Déclaration « données jetables » : retenue dans `INTENT.md`, pas encore implémentée. Si elle devient une option de
   `scan.sh`, le skill la transmet après confirmation.
 - Le skill suit les options de `scan.sh` au moment de l'écriture : d'autres chantiers sont en cours.
