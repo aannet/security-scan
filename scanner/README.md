@@ -9,8 +9,9 @@ Scan statique de n'importe quel dépôt, et dynamique ZAP en option. Seule dépe
 ./scan.sh <dépôt> --strict                     # échoue aussi sur un constat haut
 ./scan.sh <dépôt> --only=secrets,code          # sous-ensemble d'étapes
 ./scan.sh <dépôt> --audit=audits/<repo>/run-1  # valide en plus une sortie d'audit par agent
-./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (après modif de scan.py, report.py, zap.py, Dockerfile)
+./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (après modif de scan.py, report.py, zap.py, review.py, Dockerfile)
 ./scan.sh --version                            # affiche la version du kit
+./scan.sh --review=reports/<dossier>           # relecture des faux positifs (review.py, voir ../README.md)
 SCAN_BUDGET=300 ./scan.sh <dépôt>              # budget de temps en secondes (défaut 570)
 ./scan.sh <dépôt> --zap=http://localhost:3000  # ajoute le dynamique (options --zap-* : voir ../README.md)
 ```

@@ -571,6 +571,9 @@ def corrections(d):
     """corrections.md : toutes les fiches, de la plus grave à la moins grave."""
     items = sorted_items(d)
     head = [f"# Corrections · {d['repo']}", context(d), PREAMBLE.format(repo=d["repo"]), f"{len(items)} constat(s)."]
+    if d.get("review"):
+        head.append(f"Liste relue : {len(d['review']['dismissed'])} constat(s) écarté(s) comme faux positifs, absents d'ici "
+                    "et listés dans report-revu.html.")
     failed = [TOOL_FR[n] for n, s in d["steps"].items() if n in TOOL_FR and "error" in s]
     if failed:
         head.append(f"Étapes en erreur, donc absentes de cette liste : {', '.join(failed)}.")
@@ -627,19 +630,37 @@ def grouped(items):
     return list(groups.values())
 
 
+def cards_file(d):
+    return "corrections-revu.md" if d.get("review") else "corrections.md"
+
+
+def dismissed_section(review):
+    """Constats écartés à la relecture : hors des comptes, mais visibles, avec le motif retenu."""
+    rows = "".join(
+        f'<li><span class="s s-{i["sev"]}">{SEV_FR[i["sev"]]}</span><span><strong>{E(i["msg"] or i["rule"])}</strong><br>'
+        f'<code>{E(i["where"])}</code> · {E(i["rule"])} · {E(TOOL_FR[i["tool"]])}<br>Motif : {E(i["reason"])}</span></li>'
+        for i in review["dismissed"])
+    return [f'<h2 id="ecartes">Écartés à la relecture ({len(review["dismissed"])})</h2>'
+            '<p class="note">Faux positifs déclarés après le scan, à la main ou avec une assistance par IA (<code>ecarts.json</code>). '
+            'Ils sortent des comptes et du verdict. Un nouveau scan les signalera à nouveau.</p>'
+            f'<div class="panel"><ul class="gaps">{rows}</ul></div>']
+
+
 def findings_section(d, items, totals):
     shown = items[:500]
     groups = grouped(shown)
     title = f"Constats ({len(items)})" + (f" · {plural(len(groups), 'ligne')} par règle" if len(groups) < len(shown) else "")
     h = [f'<h2 id="constats">{title}</h2>']
     if not items:
-        return h + ['<div class="panel"><ul class="gaps"><li>Aucun constat.</li></ul></div>']
+        empty = "Aucun constat restant après relecture." if d.get("review") else "Aucun constat."
+        return h + [f'<div class="panel"><ul class="gaps"><li>{empty}</li></ul></div>']
     h.append('<div class="filters"><button data-f="all" aria-pressed="true">Tous</button>')
     h += [f'<button data-f="{s}" aria-pressed="false">{SEV_FR[s]} {totals[s]}</button>' for s in SEV if totals.get(s)]
     h += [f'<button data-f="{t}" aria-pressed="false">{lbl}</button>' for t, lbl in TOOL_FR.items()
           if any(t in i["steps"] for i in items)]
     h.append('</div><div class="copybar"><button id="copy-all">Copier la sélection pour une IA</button>'
-             '<span class="muted">Fiches des lignes affichées. Toutes les fiches : <code>corrections.md</code>, à côté de ce rapport.</span></div>')
+             '<span class="muted">Fiches des lignes affichées. Toutes les fiches : '
+             f'<code>{cards_file(d)}</code>, à côté de ce rapport.</span></div>')
     h.append('<div class="panel scroll"><table id="findings"><thead><tr><th>Sévérité</th><th>Constat</th><th>Correctif indiqué</th>'
              '<th>Détecté par</th><th>Fiche</th></tr></thead><tbody>')
     for row, group in enumerate(groups):
@@ -651,7 +672,7 @@ def findings_section(d, items, totals):
         else:
             locations = "".join(f'<div class="loc">{E(i["where"])}</div>' for _, i in group[:LOCATIONS_MAX])
             if len(group) > LOCATIONS_MAX:
-                locations += f'<div class="loc">… {len(group) - LOCATIONS_MAX} autres dans corrections.md</div>'
+                locations += f'<div class="loc">… {len(group) - LOCATIONS_MAX} autres dans {cards_file(d)}</div>'
             rule = "" if first["tool"] == "secrets" else f'<small>{E(first["rule"])}</small>'  # déjà dans le titre
             where = f'{rule}<details><summary>{len(group)} emplacements</summary>{locations}</details>'
         fixes = list(dict.fromkeys(str(p["fix"]).strip() for p in parts if p.get("fix")))
@@ -957,15 +978,23 @@ def render(d):
     mode = "statique seul" if not z else "dynamique en erreur" if "error" in z else (
         f"ZAP {'actif' if z['active'] else 'passif'}, non authentifié")
     kind, title, rule = verdict(d, totals)
+    review = d.get("review")
+    if review:
+        before = review["original"]
+        title += " (après relecture)"
+        rule += (f" {plural(len(review['dismissed']), 'constat écarté', 'constats écartés')}. Scan d'origine : "
+                 f"{'en échec' if before['fail'] else 'réussi'}, {before['critical']} critique, {before['high']} haut.")
     levels = [s for s in SEV if s != "unknown" or totals[s]]
 
-    main = [f'<header><h1>Rapport de scan · {E(d["repo"])}</h1><div class="meta">{ref} · {E(d["started"])} UTC · '
+    main = [f'<header><h1>Rapport de scan{" relu" if review else ""} · {E(d["repo"])}</h1><div class="meta">{ref} · {E(d["started"])} UTC · '
             f'{inv["files"]} fichiers · {mmss(d["duration"])} sur {mmss(d["budget"])} · {mode} · '
             f'mode {"strict" if d["strict"] else "standard"}</div></header>',
             f'<section class="verdict-box {kind}" id="verdict"><div><strong>{E(title)}</strong><p>{E(rule)}</p></div><div class="counts">'
             + "".join(f'<div class="{s}{"" if totals[s] else " zero"}"><b>{totals[s]}</b><span>{SEV_FR[s]}</span></div>' for s in levels)
             + "</div></section>"]
     main += findings_section(d, items, totals)
+    if review:
+        main += dismissed_section(review)
 
     main.append('<h2 id="perimetre">Périmètre</h2><div class="panel scroll"><table id="scope"><thead><tr><th>Dimension</th><th>Outil</th>'
                 '<th>État</th><th>Testé</th><th>Non testé</th></tr></thead><tbody>')
@@ -986,7 +1015,8 @@ def render(d):
                 f'{dyn} · image {E(v.get("arch", "?"))}. '
                 f'JSON bruts : gitleaks.json, osv.json, semgrep.json{", zap.json" if "zap" in steps else ""}, resume.json.</footer>')
 
-    links = (f'<a href="#verdict">Verdict</a><a href="#constats">Constats<em>{len(items)}</em></a><a href="#perimetre">Périmètre</a>'
+    gone = f'<a href="#ecartes">Écartés<em>{len(review["dismissed"])}</em></a>' if review else ""
+    links = (f'<a href="#verdict">Verdict</a><a href="#constats">Constats<em>{len(items)}</em></a>{gone}<a href="#perimetre">Périmètre</a>'
              '<a href="#details">Détails</a>' + "".join(f'<a class="sub" href="#{f[0]}">{E(f[1])}</a>' for f in folds))
     return (f'<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Scan · {E(d["repo"])}</title><link rel="icon" href="{FAVICON}"><style>{CSS}</style><script>{THEME_JS}</script></head><body><div class="app">'

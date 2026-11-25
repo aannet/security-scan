@@ -66,7 +66,7 @@ RUN mkdir -p /opt/rules /tmp/vide \
  && date -u +%Y-%m-%d > /opt/rules/FETCHED \
  && chmod -R a+rX /opt/rules
 
-COPY scan.py report.py zap.py /opt/scan/
+COPY scan.py report.py zap.py review.py /opt/scan/
 
 # Non-root. Le dépôt est monté en lecture seule ; seul /out est inscriptible (et /tmp en tmpfs).
 RUN useradd --uid 10001 --create-home scanner \

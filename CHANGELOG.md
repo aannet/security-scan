@@ -3,6 +3,16 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.7.0 - 2026-11-26
+
+### Ajouté
+
+- Relecture des faux positifs : `scan.sh --review=<dossier d'un rapport>` liste les constats, puis, avec un
+  `ecarts.json`, produit `report-revu.html` et `corrections-revu.md`. Les constats écartés sortent des comptes et du
+  verdict et restent listés avec leur motif ; le rapport d'origine n'est pas modifié.
+- `/seck-scan` propose cette relecture en fin de scan. Il ne lit les constats qu'après accord, n'écarte que ceux que la
+  personne désigne et n'ouvre pas les fichiers qui contiennent un secret détecté.
+
 ## 1.6.0 - 2026-11-26
 
 ### Modifié

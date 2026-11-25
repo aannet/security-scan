@@ -32,8 +32,9 @@ du kit, accepter la confiance au dossier, puis taper `/seck-scan`. L'assistant d
 trouver la cible et le contrat OpenAPI, affiche la commande `scan.sh` et la lance après confirmation. Il annonce le
 risque sur les données avant un scan AJAX ou actif.
 
-Il s'appuie sur la sortie console et a pour consigne de ne pas lire les constats ; c'est une consigne au modèle, pas un
-verrou technique. Rien à installer dans le kit. Sans Claude Code, `scan.sh` et ce README suffisent ; en CI, utiliser
+Il s'appuie sur la sortie console. En fin de scan, il propose de relire les constats pour écarter les faux positifs
+(voir [Relecture](#relecture-des-faux-positifs)) : sans accord, il a pour consigne de ne pas les lire. C'est une consigne
+au modèle, pas un verrou technique. Rien à installer dans le kit. Sans Claude Code, `scan.sh` et ce README suffisent ; en CI, utiliser
 `scan.sh`.
 
 ## Options
@@ -111,6 +112,26 @@ Dans `reports/<horodatage>-<dépôt>/` :
   projet scanné (les mêmes fiches se copient depuis le rapport) ;
 - `resume.json` : synthèse, comptes par sévérité, versions des outils ;
 - `gitleaks.json`, `osv.json`, `semgrep.json`, `zap.json` (avec `--zap`) : sorties brutes.
+
+## Relecture des faux positifs
+
+```bash
+./scan.sh --review=reports/<horodatage>-<dépôt>   # liste les constats et leur identifiant
+```
+
+Écrire dans ce dossier un `ecarts.json`, à la main ou avec `/seck-scan`, puis relancer la même commande :
+
+```json
+{"items": [{"id": "<identifiant listé>", "reason": "Pourquoi c'est un faux positif"}]}
+```
+
+Elle produit `report-revu.html` et `corrections-revu.md` : les constats écartés sortent des comptes et du verdict, et
+restent listés avec leur motif, à côté du résultat d'origine. `report.html` et le code de sortie du scan ne changent pas.
+La relecture se fait sans réseau, avec la version du kit qui a produit le rapport. Les routes ouvertes mesurées par la
+sonde anonyme et les constats d'un audit par agent ne s'écartent pas.
+
+Elle ne vaut que pour ce rapport. Pour qu'un faux positif ne revienne pas, déclarer l'exclusion dans `tests/security/` du
+dépôt scanné.
 
 ## Isolation
 

@@ -4,6 +4,7 @@
 #   ./scan.sh <chemin-du-dépôt> [--strict] [--only=secrets,deps,code,skill] [--audit=<dossier>] [--rebuild]
 #   ./scan.sh <chemin-du-dépôt> --zap=<url> [--zap-active] [--zap-ajax] [--zap-openapi=<fichier|url>]
 #                               [--zap-network=<réseau Docker>] [--zap-allow-remote=<hôte>]
+#   ./scan.sh --review=<dossier d'un rapport>
 #   ./scan.sh --version
 #
 # Le dépôt est monté en lecture seule. Rapport : reports/<horodatage>-<dépôt>/report.html
@@ -16,9 +17,28 @@ VERSION=$(cat "$KIT/VERSION")
 IMAGE=${SCAN_IMAGE:-security-kit:$VERSION}
 BUDGET=${SCAN_BUDGET:-570}
 
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 [ $# -ge 1 ] || usage
 case "$1" in -h|--help) usage ;; --version) echo "SECK $VERSION"; exit 0 ;; esac
+# Relecture d'un rapport existant : ni dépôt ni réseau, seul le dossier du rapport est monté (voir scanner/review.py).
+case "$1" in
+  --review=?*)
+    [ $# -eq 1 ] || { echo "--review s'emploie seul." >&2; exit 2; }
+    DIR=${1#--review=}
+    [ -f "$DIR/resume.json" ] || { echo "Rapport introuvable (pas de resume.json) : $DIR" >&2; exit 2; }
+    OUT=$(CDPATH= cd -- "$DIR" && pwd)
+    if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+      echo "Construction de l'image $IMAGE (une seule fois)..."
+      docker build -q --build-arg KIT_VERSION="$VERSION" -t "$IMAGE" "$KIT/scanner" >/dev/null
+    fi
+    exec docker run --rm --init --network none \
+      --user "$(id -u):$(id -g)" \
+      --read-only --tmpfs /tmp:size=64m \
+      --cap-drop ALL --security-opt no-new-privileges \
+      --memory 1g --pids-limit 128 \
+      -e HOST_OUT="$OUT" -v "$OUT":/out \
+      --entrypoint python3 "$IMAGE" -I /opt/scan/review.py ;;
+esac
 [ -d "$1" ] || { echo "Dépôt introuvable : $1" >&2; exit 2; }
 REPO=$(CDPATH= cd -- "$1" && pwd)
 shift

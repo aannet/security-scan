@@ -17,6 +17,12 @@ dépendance** sur la machine qui l'exécute.
 | 6 | Rapport final HTML | dashboard autonome (sans dépendance externe) : verdict, constats, zones couvertes et non couvertes. Un résultat se lit sans défiler ; une couleur a un seul sens |
 | 7 | Lecture seule | le dépôt scanné n'est jamais modifié ; conteneur durci (read-only, non root, sans capacités) |
 
+## Relecture (option `--review`)
+
+Après un scan, une personne, avec ou sans IA, peut écarter des faux positifs, un par un et avec un motif. Le kit produit
+alors un rapport relu : comptes et verdict recalculés, écarts visibles avec leur motif, résultat d'origine rappelé. Le
+rapport d'origine et le code de sortie du scan ne changent pas. Les mesures du kit (refus anonyme) ne s'écartent pas.
+
 ## Dynamique (option `--zap`)
 
 ZAP teste une application **déjà lancée**, dont on fournit l'URL. Sans `--zap`, le kit ne change pas de comportement.

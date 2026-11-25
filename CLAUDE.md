@@ -19,11 +19,12 @@ Rappel des invariants :
 - `VERSION` : version du kit (SemVer), source unique. `scan.sh` en fait le tag de l'image et la passe au build (`KIT_VERSION`) ; affichée en console et dans le rapport. L'incrémenter à chaque modification livrée de `scanner/` ou `scan.sh`, avec une entrée dans `CHANGELOG.md`, un tag `vX.Y.Z` et une release GitHub sur ce tag (titre `X.Y.Z`, notes reprises du `CHANGELOG.md`), créée une fois le tag poussé.
 - `scan.sh` : lanceur (build de l'image si absente, puis scan).
 - `.claude/skills/seck-scan/` : assistant `/seck-scan`, skill Claude Code facultatif qui compose et lance `scan.sh`. Les garde-fous restent dans `scan.sh` et `zap.py` ; à relire quand les options ou la sortie console changent (cadrage : `docs/brief-wizard.md`).
-- `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py`, `report.py` et `zap.py`.
+- `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py`, `report.py`, `zap.py` et `review.py`.
 - `scanner/Dockerfile` : image (outils et règles Semgrep épinglés au build). Source unique des versions : exposées en `ENV`, lues par `scan.py` (`VERSIONS`), jamais écrites en dur ailleurs.
 - `scanner/scan.py` : orchestrateur parallèle et progression console.
 - `scanner/report.py` : rendu du dashboard HTML.
 - `assets/logo/` : logo SECK en SVG, et `seck-apercu.png` (1280×640, aperçu de dépôt GitHub). `report.py` porte une copie des SVG ; modifier les trois ensemble.
+- `scanner/review.py` : relecture d'un rapport (`scan.sh --review`) : liste les constats, produit `report-revu.html` sans les faux positifs retenus. Ne modifie jamais le rapport d'origine.
 - `design.md` : design system du rapport ; les écarts assumés (polices système, entre autres) sont listés dans `report.py`.
 - `scanner/zap.py` : dynamique : contrôle de la cible, sonde anonyme, plan ZAP, lecture des résultats (ZAP tourne dans son image, lancée par `scan.sh`).
 - Après une modification de `scanner/`, relancer avec `--rebuild` : l'image n'est pas reconstruite automatiquement.
