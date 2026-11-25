@@ -66,7 +66,7 @@ RUN mkdir -p /opt/rules /tmp/vide \
  && date -u +%Y-%m-%d > /opt/rules/FETCHED \
  && chmod -R a+rX /opt/rules
 
-COPY scan.py report.py /opt/scan/
+COPY scan.py report.py zap.py /opt/scan/
 
 # Non-root. Le dépôt est monté en lecture seule ; seul /out est inscriptible (et /tmp en tmpfs).
 RUN useradd --uid 10001 --create-home scanner \
@@ -77,12 +77,17 @@ USER scanner
 # Version du kit, passée par scan.sh depuis le fichier VERSION. Déclarée en fin d'image : la changer n'invalide
 # pas le cache des couches d'outils et de règles.
 ARG KIT_VERSION=dev
+# ZAP (dynamique, option --zap) : image officielle lancée à part par scan.sh, jamais incluse ici. Épinglée par le digest
+# de l'index multi-architecture (amd64, arm64) ; add-ons et règles sont figés avec elle. Changer la version ET le digest.
+ARG ZAP_VERSION=2.17.0
+ARG ZAP_DIGEST=sha256:9624669db72f54d86c4b46a7064518bd9bf79d8c61a4c31befa9923489f328af
 LABEL org.opencontainers.image.title="Security Kit" org.opencontainers.image.version=${KIT_VERSION}
 # Versions : source unique, reprise par scan.py pour le rapport.
 ENV HOME=/tmp SEMGREP_SEND_METRICS=off SEMGREP_ENABLE_VERSION_CHECK=0 PYTHONIOENCODING=utf-8 \
     SKILL_DIR=/opt/security-audit-skill/skills/security-audit RULES_DIR=/opt/rules \
     GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=* \
     GITLEAKS_VERSION=${GITLEAKS_VERSION} OSV_VERSION=${OSV_VERSION} SEMGREP_VERSION=${SEMGREP_VERSION} \
-    SKILL_REF=${SKILL_REF} KIT_VERSION=${KIT_VERSION}
+    SKILL_REF=${SKILL_REF} KIT_VERSION=${KIT_VERSION} \
+    ZAP_VERSION=${ZAP_VERSION} ZAP_IMAGE=ghcr.io/zaproxy/zaproxy:${ZAP_VERSION}@${ZAP_DIGEST}
 
 ENTRYPOINT ["python3", "-I", "/opt/scan/scan.py"]

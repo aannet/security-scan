@@ -11,16 +11,18 @@ Rappel des invariants :
 - **Progression en console uniquement**, sans fichier ni serveur de suivi. Tout asset temporaire est supprimé en fin de scan.
 - **Sortie** : `report.html` (dashboard autonome, sans ressource externe) + JSON bruts + `resume.json`.
 - **Lecture seule** sur le dépôt scanné, conteneur durci. Ne pas assouplir les options `docker run` du lanceur.
-- Le dynamique (API, back-end, BDD en conditions réelles) n'est pas couvert : le rapport doit continuer à le déclarer.
+- **Dynamique optionnel** (`--zap`) : passif par défaut, cible locale sauf `--zap-allow-remote`, ZAP confiné à l'origine. Sans `--zap`, comportement inchangé.
+- Surface authentifiée, autorisations, charge et BDD ne sont pas couvertes : le rapport doit continuer à le déclarer.
 
 ## Carte
 
 - `VERSION` : version du kit (SemVer), source unique. `scan.sh` en fait le tag de l'image et la passe au build (`KIT_VERSION`) ; affichée en console et dans le rapport. L'incrémenter à chaque modification livrée de `scanner/` ou `scan.sh`, avec une entrée dans `CHANGELOG.md`, un tag `vX.Y.Z` et une release GitHub sur ce tag (titre `X.Y.Z`, notes reprises du `CHANGELOG.md`), créée une fois le tag poussé.
 - `scan.sh` : lanceur (build de l'image si absente, puis scan).
-- `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py` et `report.py`.
+- `scanner/` : contexte de build de l'image ; `.dockerignore` n'y laisse passer que `scan.py`, `report.py` et `zap.py`.
 - `scanner/Dockerfile` : image (outils et règles Semgrep épinglés au build). Source unique des versions : exposées en `ENV`, lues par `scan.py` (`VERSIONS`), jamais écrites en dur ailleurs.
 - `scanner/scan.py` : orchestrateur parallèle et progression console.
 - `scanner/report.py` : rendu du dashboard HTML.
+- `scanner/zap.py` : dynamique : contrôle de la cible, plan ZAP, lecture des résultats (ZAP tourne dans son image, lancée par `scan.sh`).
 - Après une modification de `scanner/`, relancer avec `--rebuild` : l'image n'est pas reconstruite automatiquement.
 - `reports/<horodatage>-<dépôt>/` : rapports de scan (générés, ignorés par git, hors du contexte de build).
 - `.agents/skills/security-audit/` : skill d'audit Cloudflare (MIT), version figée dans `skills-lock.json`, licence dans `LICENSES/`. L'image clone sa propre copie épinglée.

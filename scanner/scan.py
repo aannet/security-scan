@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scan de sécurité statique d'un dépôt quelconque. Étapes en parallèle, budget de temps global, progression en console.
+"""Scan de sécurité d'un dépôt quelconque (statique, et dynamique ZAP en option). Étapes en parallèle, budget de temps global, progression en console.
 
 Usage (dans le conteneur) :
   scan.py [--only=secrets,deps,code,skill] [--strict]
@@ -9,6 +9,8 @@ Entrées (montées par l'appelant, voir scan.sh) :
   /src/tests/security  config optionnelle du dépôt : gitleaks.toml, osv-scanner.toml, semgrep-exclusions.json
   /audit   optionnel : sortie d'un audit par agent (findings.json, coverage-ledger.json, triage.json optionnel)
   /out     rapports : report.html, resume.json, JSON bruts des outils
+  /out/.zap  présent avec --zap : plan préparé par zap.py et sorties du conteneur ZAP, que scan.sh lance en parallèle
+             puis supprime
 
 Codes de sortie : 1 si un constat critique (secret, CVSS >= 9, Semgrep CRITICAL), une erreur d'outil ou un dépassement
 de budget ; avec --strict, 1 aussi pour un constat haut (CVSS >= 7, Semgrep ERROR/HIGH). Sinon 0.
@@ -30,6 +32,10 @@ from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path, PurePosixPath
 
+sys.path.insert(0, str(Path(__file__).parent))  # python -I n'ajoute pas le dossier du script
+import report
+import zap
+
 SRC = Path(os.environ.get("SRC", "/src"))
 OUT = Path(os.environ.get("OUT", "/out"))
 CFG = Path(os.environ.get("CONFIG_DIR", str(SRC / "tests" / "security")))
@@ -40,12 +46,13 @@ T0 = time.monotonic()
 # Versions fixées par le Dockerfile (ENV) : source unique, reprises dans les constats et le rapport.
 VERSIONS = {"kit": os.environ.get("KIT_VERSION", "dev"), "gitleaks": os.environ.get("GITLEAKS_VERSION", "?"), "osv": os.environ.get("OSV_VERSION", "?"),
             "semgrep": os.environ.get("SEMGREP_VERSION", "?"), "skill": os.environ.get("SKILL_REF", "?")[:7],
+            "zap": os.environ.get("ZAP_VERSION", "?"),
             "arch": os.uname().machine}
 # Fichiers non suivis plus gros que ce seuil : non copiés pour gitleaks (tmpfs de 1 Go), signalés comme non couverts.
 LOOSE_MAX = 10 * 1024 * 1024
 
-LABELS = {"inventory": "Inventaire", "secrets": "Secrets", "deps": "Dépendances", "code": "Code", "skill": "Skill d'audit"}
-TOOLS = {"inventory": "git ls-files", "secrets": "gitleaks", "deps": "OSV-Scanner", "code": "Semgrep", "skill": "validateurs Cloudflare"}
+LABELS = {"inventory": "Inventaire", "secrets": "Secrets", "deps": "Dépendances", "code": "Code", "skill": "Skill d'audit", "zap": "Dynamique"}
+TOOLS = {"inventory": "git ls-files", "secrets": "gitleaks", "deps": "OSV-Scanner", "code": "Semgrep", "skill": "validateurs Cloudflare", "zap": "OWASP ZAP"}
 LEVELS = ("critical", "high", "medium", "low", "unknown")
 
 # Répertoires jamais inventoriés hors git (dépendances, sorties de build).
@@ -151,6 +158,16 @@ class Board:
             s["state"], s["note"] = state, note
             if not self.tty:
                 print(f"[{fmt_t(time.monotonic() - T0)}] {LABELS[name]:<14} {self.WORDS[state]:<10} {note}", flush=True)
+
+    def note(self, name, note):
+        """Avancement d'une étape en cours, sans toucher à son chronomètre."""
+        with self.lock:
+            s = self.st[name]
+            if s["state"] != "run" or s["note"] == note:
+                return
+            s["note"] = note
+            if not self.tty:
+                print(f"[{fmt_t(time.monotonic() - T0)}] {LABELS[name]:<14} {self.WORDS['run']:<10} {note}", flush=True)
 
     def elapsed(self, name):
         s = self.st[name]
@@ -609,13 +626,28 @@ def audit_summary(audit, meta):
     return summary, errors
 
 
+def dynamic(inv, progress=lambda note: None):
+    """ZAP tourne dans son propre conteneur (lancé par scan.sh) : on suit son journal, puis on lit ses sorties."""
+    work = OUT / ".zap"
+    done = work / "exit"
+    while not done.exists():
+        if remaining() < 5:
+            raise RuntimeError(f"budget de temps dépassé ({BUDGET} s), ZAP interrompu")
+        phase = zap.current_phase(work)
+        if phase:
+            progress(phase)
+        time.sleep(1)
+    return zap.results(work, OUT, VERSIONS["zap"])
+
+
 STEPS = {"secrets": secrets, "deps": deps, "code": code, "skill": skill}
 
 
 def main(argv):
     strict = "--strict" in argv
     only = next((a[len("--only="):] for a in argv if a.startswith("--only=")), ",".join(STEPS)).split(",")
-    unknown = [s for s in only if s not in STEPS]
+    dyn = (OUT / ".zap" / "meta.json").exists()
+    unknown = [s for s in only if s not in STEPS and not (s == "zap" and dyn)]
     if unknown:
         print(f"Étape inconnue : {', '.join(unknown)}. Choix : {', '.join(STEPS)}", file=sys.stderr)
         return 2
@@ -625,7 +657,11 @@ def main(argv):
     OUT.mkdir(parents=True, exist_ok=True)
     started = datetime.now(timezone.utc)
 
-    names = ["inventory", *STEPS]
+    steps = dict(STEPS)
+    if dyn:  # demandé par --zap : lancé quel que soit --only
+        steps["zap"] = lambda inv: dynamic(inv, lambda note: board.note("zap", note))
+        only = [*only, "zap"]
+    names = ["inventory", *steps]
     board = Board(names)
     print(f"\nSecurity Kit {VERSIONS['kit']} · {os.environ.get('REPO_NAME', SRC)} · budget {fmt_t(BUDGET)}\n", flush=True)
     board.start()
@@ -648,7 +684,7 @@ def main(argv):
             return
         board.set(name, "run")
         try:
-            res = STEPS[name](inv)
+            res = steps[name](inv)
             summary[name] = res
             c = res["counts"]
             board.set(name, "warn" if (c["critical"] or c["high"]) else "ok", res["note"])
@@ -656,8 +692,8 @@ def main(argv):
             summary[name] = {"error": str(err)}
             board.set(name, "fail", str(err).splitlines()[0][:120] if str(err) else "erreur")
 
-    with ThreadPoolExecutor(max_workers=len(STEPS)) as pool:
-        list(pool.map(step, STEPS))
+    with ThreadPoolExecutor(max_workers=len(steps)) as pool:
+        list(pool.map(step, steps))
     board.finish()
 
     critical = high = 0
@@ -701,8 +737,6 @@ def main(argv):
     resume["steps"] = {k: {kk: vv for kk, vv in v.items() if kk != "scanned"} for k, v in summary.items()}
     (OUT / "resume.json").write_text(json.dumps(resume, indent=2, ensure_ascii=False), encoding="utf-8")
 
-    sys.path.insert(0, str(Path(__file__).parent))
-    import report
     (OUT / "report.html").write_text(report.render(data), encoding="utf-8")
 
     print(f"\nCritique {critical} · haut {high} · durée {fmt_t(duration)}")

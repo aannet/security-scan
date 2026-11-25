@@ -3,6 +3,15 @@
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Versions : [SemVer](https://semver.org/lang/fr/),
 source unique dans `VERSION`.
 
+## 1.3.0 - 2026-11-25
+
+### Ajouté
+
+- Dynamique optionnel avec OWASP ZAP 2.17.0 sur une application déjà lancée : `--zap=<url>`, passif par défaut,
+  `--zap-active`, `--zap-ajax`, `--zap-openapi`, `--zap-network`, `--zap-allow-remote`. Image officielle épinglée par
+  digest, lancée à part dans un conteneur durci, en parallèle du scan statique et dans le même budget.
+- Rapport : section « Dynamique · OWASP ZAP », constats filtrables, phases partielles et limites déclarées ; `zap.json`.
+
 ## 1.2.2 - 2026-11-25
 
 ### Corrigé

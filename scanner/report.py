@@ -5,9 +5,9 @@ from collections import Counter, defaultdict
 E = html.escape
 SEV = ("critical", "high", "medium", "low", "unknown")
 SEV_FR = {"critical": "Critique", "high": "Haut", "medium": "Moyen", "low": "Bas", "unknown": "Inconnu"}
-TOOL_FR = {"secrets": "Secrets", "deps": "Dépendances", "code": "Code", "skill": "Audit"}
+TOOL_FR = {"secrets": "Secrets", "deps": "Dépendances", "code": "Code", "skill": "Audit", "zap": "Dynamique"}
 STEP_FR = {"inventory": "Inventaire", "secrets": "Secrets · gitleaks", "deps": "Dépendances · OSV-Scanner",
-           "code": "Code · Semgrep", "skill": "Skill d'audit · validateurs"}
+           "code": "Code · Semgrep", "skill": "Skill d'audit · validateurs", "zap": "Dynamique · OWASP ZAP"}
 
 CSS = """
 :root{--bg:#f6f7f9;--panel:#fff;--fg:#14171c;--muted:#626a75;--line:#e3e6ea;--soft:#f0f2f5;
@@ -226,17 +226,74 @@ def dimensions(d):
     dims.append(("Audit par agent", (k, lbl), detail))
 
     sql = inv["langs"].get("SQL", 0)
-    dims.append(("API en conditions réelles", ("no", "Non couvert"),
-                 "Aucune exécution : authz, validation d'entrée, en-têtes, limites non testés en vrai"))
+    z = steps.get("zap")
+    if not z:
+        api = (("no", "Non couvert"), "Aucune exécution : authz, validation d'entrée, en-têtes, limites non testés en vrai")
+    elif "error" in z:
+        api = (("no", "Erreur"), z["error"])
+    else:
+        api = (("part", "Partiel"), f"ZAP {'actif' if z['active'] else 'passif'} sur {z['url']}, sans authentification : "
+               f"{len(z['urls'])} URL visitée(s). Authz et logique métier non testées")
+    dims.append(("API en conditions réelles", *api))
     dims.append(("Back-end sous charge", ("no", "Non couvert"), "Pas de test de charge ni d'épuisement de ressources"))
     dims.append(("Base de données", ("no", "Non couvert"),
                  (f"{sql} fichier(s) SQL détecté(s), " if sql else "") + "rôles, privilèges et RLS non testés en exécution"))
     return dims
 
 
+def zap_gaps(z):
+    out = []
+    if not z["active"]:
+        out.append(("no", "Dynamique", "Scan passif : aucune attaque envoyée, injections et XSS non recherchées (option --zap-active)"))
+    for p in z["phases"]:
+        if p["partial"]:
+            out.append(("part", "Dynamique", f"{p['label']} : interrompu à sa limite de {p['limit']} min, résultat partiel"))
+    if not z["ajax"]:
+        out.append(("part", "Dynamique", "Pas d'AJAX spider : les écrans construits en JavaScript ne sont pas explorés (option --zap-ajax)"))
+    elif not z["found"].get("spiderAjax"):
+        out.append(("no", "Dynamique", "L'AJAX spider n'a rien visité : exploration JavaScript non faite, relancer le scan"))
+    if z["skipped_operations"]:
+        out.append(("no", "Dynamique", f"{z['skipped_operations']} opération(s) d'écriture du contrat OpenAPI non appelées en passif"))
+    if not z["openapi"]:
+        out.append(("na", "Dynamique", "Pas de contrat OpenAPI : seuls les endpoints découverts par exploration sont testés"))
+    if z["ajax"] or z["active"]:
+        out.append(("na", "Dynamique", "Scripts et styles tiers : chargés par le navigateur de ZAP comme par tout visiteur, non testés"))
+    return out
+
+
+def zap_section(z):
+    h = ['<h2>Dynamique · OWASP ZAP</h2><div class="kpis">']
+    for n, lbl in [("Actif" if z["active"] else "Passif", "Mode · non authentifié"), (len(z["urls"]), "URL visitées"),
+                   (sum(z["counts"].values()), "Alertes"), (z["informational"], "Informatives (zap.json)")]:
+        h.append(f'<div class="kpi"><b>{n}</b><span>{E(lbl)}</span></div>')
+    h.append(f'</div><p class="note">Cible <code>{E(z["url"])}</code> · {"hôte distant, autorisé explicitement" if z["remote"] else "cible locale"}'
+             + (f' · réseau Docker <code>{E(z["network"])}</code>' if z["network"] else "")
+             + (f' · contrat <code>{E(z["openapi"])}</code>' if z["openapi"] else "") + '</p>')
+    h.append('<div class="panel scroll"><table><thead><tr><th>Phase</th><th class="num">Durée</th><th class="num">Limite</th>'
+             '<th class="num">URL trouvées</th><th>État</th></tr></thead><tbody>')
+    for p in z["phases"]:
+        state = chip("part", "Partiel") if p["partial"] else chip("ok", "Terminé")
+        found = z["found"].get(p["job"])
+        h.append(f'<tr><td>{E(p["label"])}</td><td class="num">{mmss(p["seconds"])}</td>'
+                 f'<td class="num">{mmss(p["limit"] * 60) if p["limit"] else "—"}</td>'
+                 f'<td class="num">{"—" if found is None else found}</td><td>{state}</td></tr>')
+    h.append('</tbody></table></div>')
+    h.append(f'<details class="note" style="margin-top:10px"><summary>URL visitées ({len(z["urls"])})</summary>'
+             + "".join(f'<div class="mono">{E(u)}</div>' for u in z["urls"][:300])
+             + (f'<div class="muted">… {len(z["urls"]) - 300} autres dans resume.json</div>' if len(z["urls"]) > 300 else "")
+             + '</details>')
+    return h
+
+
 def gaps(d):
     steps, inv = d["steps"], d["inventory"]
-    out = [("no", "Dynamique", "API, back-end et BDD en conditions réelles : hors périmètre du scan statique (voir INTENT.md, phase 2)")]
+    z = steps.get("zap")
+    if not z:
+        out = [("no", "Dynamique", "API, back-end et BDD en conditions réelles : non testés (option --zap, application déjà lancée)")]
+    else:
+        out = [("no", "Dynamique", "Surface authentifiée, autorisations, logique métier, charge et base de données : non testées")]
+        if "error" not in z:
+            out += zap_gaps(z)
     for name, s in steps.items():
         if name in TOOL_FR and "error" in s:
             out.append(("no", TOOL_FR[name], f"Étape en erreur : {s['error'][:200]}"))
@@ -318,7 +375,7 @@ def audit_section(a):
 def render(d):
     steps, inv = d["steps"], d["inventory"]
     items = []
-    for name in ("secrets", "deps", "code", "skill"):
+    for name in TOOL_FR:
         for it in steps.get(name, {}).get("items", []):
             items.append({**it, "tool": name})
     order = {s: i for i, s in enumerate(SEV)}
@@ -357,6 +414,9 @@ def render(d):
         h.append(f'<div class="dim"><div class="top"><strong>{E(title)}</strong>{chip(k, lbl)}</div><p>{E(detail)}</p></div>')
     h.append('</div>')
 
+    if steps.get("zap", {}).get("phases"):
+        h += zap_section(steps["zap"])
+
     if steps.get("skill", {}).get("audit"):
         h += audit_section(steps["skill"]["audit"])
 
@@ -381,8 +441,9 @@ def render(d):
     h.append('</ul></div></div>')
 
     h.append('<div><h2>Déroulé</h2><div class="panel"><div class="timeline">')
-    longest = max([steps.get(n, {}).get("seconds", 0) for n in STEP_FR] + [1])
-    for n, label in STEP_FR.items():
+    shown = {n: label for n, label in STEP_FR.items() if n != "zap" or n in steps}
+    longest = max([steps.get(n, {}).get("seconds", 0) for n in shown] + [1])
+    for n, label in shown.items():
         s = steps.get(n, {})
         sec = s.get("seconds", 0)
         w = max(1, round(100 * sec / longest)) if sec else 0
@@ -430,10 +491,13 @@ def render(d):
 
     code = steps.get("code", {})
     v = d.get("versions", {})
+    dyn = ""
+    if "zap" in steps:
+        dyn = f' · OWASP ZAP {E(v.get("zap", "?"))}'
     h.append(f'<footer>Security Kit {E(v.get("kit", "?"))} · gitleaks {E(v.get("gitleaks", "?"))} · OSV-Scanner {E(v.get("osv", "?"))} · '
              f'Semgrep {E(v.get("semgrep", "?"))}, règles figées le {E(code.get("rules_date", "—"))}'
              f' ({E(", ".join(code.get("packs", [])))}) · skill cloudflare/security-audit-skill {E(v.get("skill", "?"))}'
-             f' · image {E(v.get("arch", "?"))}. '
-             f'JSON bruts : gitleaks.json, osv.json, semgrep.json, resume.json.</footer>')
+             f'{dyn} · image {E(v.get("arch", "?"))}. '
+             f'JSON bruts : gitleaks.json, osv.json, semgrep.json{", zap.json" if "zap" in steps else ""}, resume.json.</footer>')
     h.append(f'</div><script>{JS}</script></body></html>')
     return "".join(h)

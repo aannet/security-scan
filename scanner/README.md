@@ -1,6 +1,6 @@
 # Scanner
 
-Scan statique de n'importe quel dépôt. Seule dépendance hôte : Docker. Exigences dans [../INTENT.md](../INTENT.md).
+Scan statique de n'importe quel dépôt, et dynamique ZAP en option. Seule dépendance hôte : Docker. Exigences dans [../INTENT.md](../INTENT.md).
 
 ## Lancer
 
@@ -9,9 +9,10 @@ Scan statique de n'importe quel dépôt. Seule dépendance hôte : Docker. Exige
 ./scan.sh <dépôt> --strict                     # échoue aussi sur un constat haut
 ./scan.sh <dépôt> --only=secrets,code          # sous-ensemble d'étapes
 ./scan.sh <dépôt> --audit=audits/<repo>/run-1  # valide en plus une sortie d'audit par agent
-./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (après modif de scan.py, report.py, Dockerfile)
+./scan.sh <dépôt> --rebuild                    # reconstruit l'image de zéro (après modif de scan.py, report.py, zap.py, Dockerfile)
 ./scan.sh --version                            # affiche la version du kit
 SCAN_BUDGET=300 ./scan.sh <dépôt>              # budget de temps en secondes (défaut 570)
+./scan.sh <dépôt> --zap=http://localhost:3000  # ajoute le dynamique (options --zap-* : voir ../README.md)
 ```
 
 L'image `security-kit:<version>` (version lue dans `VERSION`) est construite au premier lancement (environ 1 minute). Rapport :
@@ -26,6 +27,7 @@ L'image `security-kit:<version>` (version lue dans `VERSION`) est construite au 
 | `deps` | OSV-Scanner 2.7.1 | tous les lockfiles, récursivement | CVSS ≥ 9 |
 | `code` | Semgrep 1.187.0 | packs choisis selon les langages détectés, règles figées dans l'image | impact CRITICAL |
 | `skill` | validateurs Cloudflare | validation d'un audit monté sur `/audit` (intégrité du skill testée au build de l'image) | fichier invalide |
+| `zap` | OWASP ZAP 2.17.0 | avec `--zap` seulement, quel que soit `--only` : application déjà lancée | — (High = haut) |
 
 Une erreur d'outil ou un dépassement du budget fait échouer le scan (code 1).
 
@@ -41,8 +43,8 @@ Un fichier dont Semgrep ne comprend qu'une partie de la syntaxe (`PartialParsing
 partielle** : ni couvert, ni en échec, avec les lignes en cause dans les limites. Toute autre erreur sur un fichier le
 compte en erreur d'analyse.
 
-Dashboard HTML autonome : KPIs, couverture par dimension (secrets, dépendances, code, audit, et le dynamique déclaré
-non couvert), zones avec part de code analysé et cause du non-analysé (tests, exclusions du dépôt, autres), liste
+Dashboard HTML autonome : KPIs, couverture par dimension (secrets, dépendances, code, audit ; API non couverte sans
+`--zap`, partielle avec ; charge et base de données non couvertes), zones avec part de code analysé et cause du non-analysé (tests, exclusions du dépôt, autres), liste
 des limites, déroulé, constats filtrables avec l'outil qui les a détectés.
 
 Avec `--audit=<run>`, le rapport affiche aussi les tokens consommés par l'audit par agent (lus dans `run-metadata.json`,
@@ -72,6 +74,24 @@ dossier du run, y ajoute une estimation, affichée comme telle :
 L'ordre des items donne l'ordre d'affichage. Un `triage.json` non conforme (empreinte inconnue, valeur hors liste)
 fait échouer le scan, comme un `findings.json` invalide.
 
+## Déroulé du dynamique
+
+1. `scan.sh` lance `zap.py` (image du kit, sur le réseau de la cible) : contrôle de l'URL et de sa localité, test de
+   joignabilité, réécriture du contrat OpenAPI, plan Automation Framework dans `<rapport>/.zap/`. Un refus arrête tout
+   avant le scan (code 2).
+2. L'image ZAP est téléchargée si absente (hors budget), puis lancée en arrière-plan avec ce plan.
+3. L'étape `zap` de `scan.py` suit `.zap/zap.log`, attend `.zap/exit`, filtre les résultats sur l'origine visée.
+4. `.zap/` et le conteneur ZAP sont supprimés en fin de scan, y compris sur interruption.
+
+Détails qui comptent :
+
+- le tmpfs `/home/zap` doit être `exec` : ZAP y extrait le pilote de Firefox. En `noexec`, l'AJAX spider termine sans
+  erreur et sans rien visiter (le rapport signale un AJAX spider sans résultat) ;
+- une URL du poste est jointe par `host.docker.internal`, avec l'en-tête `Host` d'origine restitué ; le rapport affiche
+  l'URL demandée ;
+- changer de version ZAP : `ZAP_VERSION` et `ZAP_DIGEST` (index multi-architecture) dans le `Dockerfile`. Les add-ons et
+  les règles sont figés avec l'image (`-silent` : pas de mise à jour au lancement).
+
 ## Config du dépôt (optionnelle)
 
 Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.toml`, `semgrep-exclusions.json`
@@ -79,7 +99,7 @@ Lue dans `tests/security/` du dépôt scanné : `gitleaks.toml`, `osv-scanner.to
 
 ## Points à savoir
 
-- **Réseau :** requis par OSV-Scanner (base de vulnérabilités). Les règles Semgrep sont dans l'image, converties en JSON au build (Semgrep les charge ~10 s plus vite qu'en YAML) puis validées par un scan à vide, qui fait échouer le build si la version de Semgrep refuse une règle : `--rebuild` les rafraîchit, ainsi que l'image de base (`--pull --no-cache`).
+- **Réseau :** requis par OSV-Scanner (base de vulnérabilités) et par ZAP pour joindre la cible. Les règles Semgrep sont dans l'image, converties en JSON au build (Semgrep les charge ~10 s plus vite qu'en YAML) puis validées par un scan à vide, qui fait échouer le build si la version de Semgrep refuse une règle : `--rebuild` les rafraîchit, ainsi que l'image de base (`--pull --no-cache`).
 - **Tests :** Semgrep ignore par défaut les dossiers `test/` et `tests/`. Le rapport les compte à part.
 - **Isolation :** dépôt en lecture seule, conteneur `--read-only`, non root, `--cap-drop ALL`, `no-new-privileges`, 4 Go, 512 processus.
 - **Architectures :** amd64 et arm64 (Apple Silicon, Graviton). L'image prend l'architecture de l'hôte ; pour en

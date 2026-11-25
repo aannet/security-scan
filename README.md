@@ -1,6 +1,7 @@
 # Security Kit
 
-Scan de sécurité statique de **n'importe quel dépôt de code**, avec **Docker comme seule dépendance**.
+Scan de sécurité de **n'importe quel dépôt de code**, avec **Docker comme seule dépendance** : analyse statique, et en
+option test d'une application qui tourne avec OWASP ZAP.
 Secrets, dépendances vulnérables, motifs de code dangereux : un rapport HTML autonome en moins de 10 minutes,
 sans rien installer sur le poste et sans jamais modifier le dépôt scanné.
 
@@ -38,10 +39,42 @@ Code de sortie 1 sur un constat critique, une erreur d'outil ou un dépassement 
 | `deps` | OSV-Scanner | tous les lockfiles du dépôt, récursivement |
 | `code` | Semgrep | règles choisies selon les langages détectés, figées dans l'image |
 | `skill` | validateurs Cloudflare | conformité d'un audit par agent monté avec `--audit` |
+| `zap` | OWASP ZAP | application déjà lancée, avec `--zap=<url>` (voir ci-dessous) |
 
 Aucun présupposé sur le dépôt : langages détectés, git facultatif. Une config propre au dépôt peut être placée dans
 `tests/security/` (`gitleaks.toml`, `osv-scanner.toml`, `semgrep-exclusions.json`) ; sans elle, les valeurs par
 défaut des outils s'appliquent. Les versions des outils sont épinglées dans [`scanner/Dockerfile`](scanner/Dockerfile).
+
+## Dynamique avec ZAP
+
+Lancer l'application, puis donner son URL :
+
+```bash
+./scan.sh <dépôt> --zap=http://localhost:3000                 # passif, application du poste
+./scan.sh <dépôt> --zap=http://api:8000 --zap-network=app_net # application sur un réseau Docker
+./scan.sh <dépôt> --zap=<url> --zap-openapi=docs/openapi.json # endpoints d'un contrat (fichier ou URL)
+./scan.sh <dépôt> --zap=<url> --zap-ajax                      # explore aussi les écrans en JavaScript (SPA)
+./scan.sh <dépôt> --zap=<url> --zap-active                    # envoie des attaques (injections, XSS...)
+./scan.sh <dépôt> --zap=https://recette.exemple.fr --zap-allow-remote=recette.exemple.fr
+```
+
+Les résultats rejoignent le même `report.html` : section dédiée, constats filtrables, URL visitées, limites. Une alerte
+ZAP « High » compte comme un constat haut (échec avec `--strict`). Le premier scan télécharge l'image ZAP (plus d'1 Go).
+
+> **Risque sur les données.** Sans `--zap-active`, aucune attaque n'est envoyée, le spider ne soumet pas les formulaires
+> `POST` et les écritures du contrat OpenAPI ne sont pas appelées. Un `GET` à effet de bord reste possible. Avec
+> `--zap-ajax` (le navigateur clique dans l'interface) ou `--zap-active`, **n'utiliser que des données jetables**.
+> Ne scanner que ce que l'on est autorisé à tester.
+
+- Une cible est **locale** si c'est le poste (`localhost`, `host.docker.internal`) ou un hôte du réseau donné par
+  `--zap-network`. Toute autre cible exige `--zap-allow-remote=<hôte>`, même en passif.
+- ZAP reste sur l'origine de l'URL (schéma, hôte, port). Une redirection vers une autre origine n'est pas suivie : donner
+  l'URL finale. Le navigateur charge les scripts et styles tiers de la page, sans les tester.
+- Un contrat OpenAPI doit être autonome (aucune `$ref` externe) ; ses serveurs sont remplacés par l'origine visée.
+- Sans authentification : la surface protégée n'est pas testée.
+- Les phases ont une durée maximale tenant dans le budget ; une phase interrompue est signalée comme partielle.
+  `SCAN_BUDGET` doit être d'au moins 210 s en passif.
+- Linux sans Docker Desktop : une application du poste doit écouter sur `0.0.0.0`, pas seulement `127.0.0.1`.
 
 ## Sortie
 
@@ -50,14 +83,17 @@ Dans `reports/<horodatage>-<dépôt>/` :
 - `report.html` : dashboard autonome (aucune ressource externe) : KPIs, couverture par zone, ce qui n'est pas
   couvert et pourquoi, constats filtrables ;
 - `resume.json` : synthèse, comptes par sévérité, versions des outils ;
-- `gitleaks.json`, `osv.json`, `semgrep.json` : sorties brutes.
+- `gitleaks.json`, `osv.json`, `semgrep.json`, `zap.json` (avec `--zap`) : sorties brutes.
 
 ## Isolation
 
 Le dépôt est monté en lecture seule. Le conteneur tourne sans root, avec un système de fichiers en lecture seule,
 sans capacité Linux ni élévation de privilèges, mémoire et processus plafonnés. Les binaires sont vérifiés par
 somme SHA-256 au build. Aucun fichier de suivi : le conteneur et son `/tmp` disparaissent à la fin du scan.
-Réseau : requis uniquement pour la base de vulnérabilités OSV.
+Réseau : requis pour la base de vulnérabilités OSV et, avec `--zap`, pour joindre la cible.
+
+Avec `--zap`, un second conteneur (image officielle ZAP) tourne en parallèle avec le même durcissement, 3 Go et 2048
+processus au plus. Il ne voit pas le dépôt : seulement un dossier de travail temporaire, supprimé en fin de scan.
 
 ## Audit par agent
 
@@ -71,14 +107,14 @@ peut l'exploiter, la confiance et l'action à mener. Le rapport HTML les affiche
 
 ## Limites
 
-- **Statique uniquement.** Rien n'est exécuté : API en fonctionnement, back-end sous charge et base de données
-  réelle ne sont pas testés. Le rapport le déclare comme zone non couverte.
+- **Dynamique partiel.** Sans `--zap`, rien n'est exécuté. Avec, seule la surface HTTP non authentifiée est testée :
+  autorisations, logique métier, charge et base de données ne le sont pas. Le rapport le déclare.
 - Semgrep ignore par défaut les dossiers `test/` et `tests/` ; le rapport les compte à part.
 - Un seul run d'audit par agent trouve environ la moitié de ce que des runs répétés trouvent (selon les auteurs du skill).
 
 ## Pour aller plus loin
 
-- [`INTENT.md`](INTENT.md) : exigences du kit et piste pour le test dynamique ;
+- [`INTENT.md`](INTENT.md) : exigences du kit, dont le dynamique ;
 - [`scanner/README.md`](scanner/README.md) : détail du scanner, progression, config, durées mesurées ;
 - [`CHANGELOG.md`](CHANGELOG.md) : historique des versions ;
 - `README.html` et `ARTICLE.html` : présentation détaillée et retour sur le premier run.
